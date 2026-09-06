@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 import channel from "../agent/channels/linq.js";
 import presentCards from "../agent/tools/present_cards.js";
 import { visualCardsState } from "../src/visual/card-state.js";
@@ -31,6 +33,29 @@ function toolContext(callId: string) {
 }
 stampDefinitionKey(presentCards, "test.present-cards");
 registerDefinitionSource("test.present-cards", { kind: "tool", name: "present_cards" });
+
+test("local card tools render a gallery, retain numbered references and never send to Linq", async t => {
+  const previous = { ...process.env };
+  t.after(() => { process.env = previous; });
+  process.env.EVE_DEV = "1";
+  delete process.env.VERCEL_ENV;
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("Local previews must not send or upload"); });
+  const local = { authenticator: "local-dev", principalType: "local-dev" as const, principalId: "local-dev", attributes: {} };
+  let context = freshContext("local-session");
+  context.set(SessionKey, { sessionId: "local-session", auth: { current: local, initiator: local }, turn: { id: "turn-1", sequence: 1 } });
+  const execute = async (input: Parameters<NonNullable<typeof presentCards.execute>>[0]) => contextStorage.run(context, () => presentCards.execute!(input, toolContext("local-preview-test")));
+  const result = await execute({ action: "present", ...set });
+  assert.ok(result && "path" in result);
+  t.after(() => rm(dirname(result.path), { recursive: true, force: true }));
+  assert.equal(result.status, "preview_ready");
+  assert.match(await readFile(result.path, "utf8"), /card-1.png/);
+  assert.equal((await readFile(result.cards[0].path)).subarray(1, 4).toString(), "PNG");
+  assert.equal(result.cards[1].sourceUrl, "https://example.com/2");
+  context = nextStep(context);
+  assert.deepEqual(await execute({ action: "status" }), result);
+  assert.deepEqual(await execute({ action: "retry" }), result);
+  await contextStorage.run(context, () => assert.equal(visualCardsState.get().lastSent, null));
+});
 
 test("real Linq adapter sends a rendered batch once, preserves references and retries failed sets", async t => {
   const recorded = t.mock.method(messageStore, "record", async (...[_scope, input]: Parameters<typeof messageStore.record>) =>

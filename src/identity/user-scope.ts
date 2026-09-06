@@ -15,6 +15,19 @@ export interface UserScopedContext {
   };
 }
 
+/** Local tools use eve's server-authenticated dev identity, never a phone scope. */
+export function isLocalToolSession(ctx: UserScopedContext, env = process.env): boolean {
+  if (env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview") return false;
+  if (env.EVE_DEV !== "1" && !(env.VERCEL === "1" && env.VERCEL_ENV === "development")) return false;
+  const { current, initiator } = ctx.session.auth;
+  return [current, initiator].every(auth => auth?.authenticator === "local-dev" &&
+    auth.principalType === "local-dev" && auth.principalId === "local-dev" && !auth.issuer);
+}
+
+export function requireToolScope(ctx: UserScopedContext, env = process.env): string {
+  return isLocalToolSession(ctx, env) ? "local-dev" : requireUserScope(ctx);
+}
+
 export function requireUserScope(ctx: UserScopedContext): string {
   const { current, initiator } = ctx.session.auth;
   if (

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requireUserScope, type UserScopedContext } from "../identity/user-scope.js";
+import { requireToolScope, type UserScopedContext } from "../identity/user-scope.js";
 
 export const searchInput = z.object({
   query: z.string().trim().min(1).max(800).describe("Public web search. Include product needs and neighborhood/ZIP when relevant, never personal recipient details."),
@@ -30,7 +30,7 @@ export async function searchWeb(
   ctx: UserScopedContext & { readonly abortSignal?: AbortSignal },
   options: { apiKey?: string; request?: typeof fetch } = {},
 ) {
-  requireUserScope(ctx);
+  requireToolScope(ctx);
   const { query, numResults } = searchInput.parse(input);
   const key = (options.apiKey ?? process.env.EXA_API_KEY)?.trim();
   if (!key) throw new Error("Web search is unavailable. The app owner must connect Exa.");
