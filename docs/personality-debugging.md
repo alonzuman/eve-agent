@@ -1,6 +1,6 @@
 # Personality investigation — September 6, 2026
 
-The reported small-talk failure reproduced locally with the original prompt and Sonnet. The voice instructions were present on every request: this was model adherence, not a missing personality file. The production candidate uses the revised composition prompt with `openai/gpt-5.6-sol`; wider pre-merge testing exposed intermittent failures in the earlier Luna candidate, described below. The candidate is local and has not been deployed.
+The reported small-talk failure reproduced locally with the original prompt and Sonnet. The voice instructions were present on every request: this was model adherence, not a missing personality file. The production candidate uses the revised composition prompt with `openai/gpt-5.6-sol`; wider pre-merge testing exposed intermittent failures in the earlier Luna candidate, described below. The evaluations use local sessions and do not send real phone messages.
 
 ## What failed and why
 
