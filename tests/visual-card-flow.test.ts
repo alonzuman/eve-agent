@@ -4,6 +4,7 @@ import channel from "../agent/channels/linq.js";
 import presentCards from "../agent/tools/present_cards.js";
 import { visualCardsState } from "../src/visual/card-state.js";
 import { cardsSchema, type CardSet } from "../src/visual/cards.js";
+import { messageStore } from "../src/messaging/message-store.js";
 import { ContextContainer, contextStorage } from "../node_modules/eve/dist/src/context/container.js";
 import { SessionKey } from "../node_modules/eve/dist/src/context/keys.js";
 import { buildCallbackContext } from "../node_modules/eve/dist/src/context/build-callback-context.js";
@@ -32,6 +33,8 @@ stampDefinitionKey(presentCards, "test.present-cards");
 registerDefinitionSource("test.present-cards", { kind: "tool", name: "present_cards" });
 
 test("real Linq adapter sends a rendered batch once, preserves references and retries failed sets", async t => {
+  const recorded = t.mock.method(messageStore, "record", async (...[_scope, input]: Parameters<typeof messageStore.record>) =>
+    input.map((message, index) => ({ ...message, ref: `m${index + 1}` })));
   const previousKey = process.env.LINQ_API_KEY;
   const previousSecret = process.env.LINQ_WEBHOOK_SECRET;
   process.env.LINQ_API_KEY = "test-api-key";
@@ -93,6 +96,10 @@ test("real Linq adapter sends a rendered batch once, preserves references and re
   await contextStorage.run(context, () => assert.deepEqual(visualCardsState.get().current?.images, []));
   await dispatch(queued, "present-1");
   assert.equal(sends, 1); assert.equal(uploads, 3);
+  assert.deepEqual(recorded.mock.calls[0].arguments[1].map(part => [part.messageId, part.partIndex, part.partType]), [
+    ["message-1", 0, "text"], ["message-1", 1, "media"], ["message-1", 2, "media"], ["message-1", 3, "media"],
+  ]);
+  assert.equal(recorded.mock.calls[0].arguments[1][2].content, "[visual card attachment: Idea 2]");
   assert.deepEqual(attachments, ["card-1.png", "card-2.png", "card-3.png"]);
   const bad = { ...set, cards: [set.cards[0], { ...set.cards[1], html: "<div>{{MISSING}}</div>" }] };
   await assert.rejects(execute({ action: "present", ...bad }, "bad-layout"), /card 2/);

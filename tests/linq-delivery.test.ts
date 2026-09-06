@@ -411,3 +411,18 @@ test("iMessage delivery instructions apply only on the Linq channel", async () =
   assert.equal(await resolver({}, { ...context, channel: { metadata: { adapterName: "slack" } } }), null);
   assert.equal(await resolver({}, { ...context, channel: {} }), null);
 });
+
+test("reaction-only completion suppresses Eve's empty-delivery marker at every chunk boundary", async () => {
+  for (const marker of ["<eve-empty-delivery/>", "&lt;eve-empty-delivery/&gt;"]) {
+    for (let cut = 0; cut <= marker.length; cut++) {
+      const { events, channel, sent, isTyping } = fixture();
+      await events["turn.started"](turn, channel);
+      await events["message.appended"](delta(marker.slice(0, cut)), channel);
+      await events["message.appended"](delta(marker.slice(cut) + "\n\n"), channel);
+      await events["message.completed"](complete(null), channel);
+      await events["turn.completed"](turn, channel);
+      assert.deepEqual(sent, []);
+      assert.equal(isTyping(), false);
+    }
+  }
+});

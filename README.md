@@ -10,13 +10,14 @@ A general-purpose eve agent on Vercel, connected to an existing Linq iMessage nu
 - Model: `anthropic/claude-sonnet-5` through Vercel AI Gateway, using project OIDC.
 - Runtime: Node.js 24, eve's Vercel Workflow integration, and Vercel Sandbox.
 - Memory: eve's built-in `fileMemory()` scoped by authenticated principal, backed by the connected **private** Blob store. Built-in compaction is unchanged.
+- Messages: Neon Postgres through Drizzle stores Linq message IDs, addressable parts, reply relationships, and reaction/reply action receipts. See [database setup and migrations](docs/database.md).
 
 ## Connect the existing Linq number
 
 First confirm that the existing number's webhook can be routed here. No existing Linq configuration has been changed.
 
 1. Enter `LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, and `LINQ_PHONE_NUMBER` in the project's [Vercel environment settings](https://vercel.com/undefined-software/eve-personal-agent/settings/environment-variables). The phone number must be its full E.164 form, such as `+14155550123`. Use encrypted/sensitive variables for secrets.
-2. Set `LINQ_ALLOWED_NUMBERS` to the comma-separated sender numbers allowed to receive responses, as described below. Redeploy with `npm run deploy`.
+2. Set `LINQ_ALLOWED_NUMBERS` to the comma-separated sender numbers allowed to receive responses, as described below. Connect Neon, apply the [database migrations](docs/database.md), then redeploy with `npm run deploy`.
 3. Public webhook access is enabled: Vercel SSO was disabled with explicit user approval. Webhook signature verification and HTTP session authentication remain enforced.
 4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format.
 5. Text that number from an allowlisted real phone. Only verified private inbound messages for the configured line from allowed sender numbers are admitted. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
@@ -28,6 +29,8 @@ The Linq channel uses eve's session continuation and interruption behavior. HTTP
 Text `!reset` by itself to start fresh. Eve retires the sender's registered conversations and replies with a confirmation. Their next message starts a new conversation with empty memory and a fresh browser project; other users keep their state. This also works before the sender's first ordinary message. See [reset behavior and retention](docs/linq.md#start-fresh-with-reset).
 
 Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
+
+The agent can also react with emoji or reply to a specific message part. These tools resolve short references through Postgres and always use the authenticated current chat. An accepted tool result means Linq accepted the request. Ordinary replies still stream as assistant text.
 
 ## Response allowlist
 
@@ -77,16 +80,20 @@ The agent can compose one to five image cards using `present_cards`, with HTML t
 ```sh
 npm ci
 vercel env pull .env.local --yes
+npm run db:migrate
 npm run dev
 npm run check
 npm run build
 ```
 
-The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Search and browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. Tests cover search, browser isolation, streaming delivery, and identity/webhook checks.
+Use a development database in `.env.local`; the migration step needs a database URL. The Neon integration must expose credentials to Development for `vercel env pull` to include them. The real Postgres integration tests run when `TEST_DATABASE_URL` points at an isolated test database; see [database verification](docs/database.md#verification).
+
+The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Search and browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. Tests cover search, browser isolation, streaming delivery, message references, action receipts, send failures, idempotency keys, and identity/webhook checks.
 
 ## Acceptance after credentials are connected
 
 - Send and receive a real iMessage.
+- Ask for an emoji reaction, then ask for a threaded reply to an earlier message or photo. Verify the correct bubble/attachment receives it and a reaction-only response adds no text bubble.
 - Ask the agent to remember a harmless unique fact, then verify it in a later conversation.
 - Use two sender accounts and confirm memory/session isolation and separate Kernel projects.
 - Try a general task such as finding information on a website using the browser.
