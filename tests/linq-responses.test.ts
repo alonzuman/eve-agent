@@ -212,6 +212,10 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
     LINQ_PHONE_NUMBER: line,
     FLAGS: sdkKey,
     BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_teststore_testsecret",
+    // Keep Blob's optional OIDC lookup from refreshing the developer's real
+    // Vercel credentials. With no store ID it uses the test read-write token.
+    VERCEL_OIDC_TOKEN: `e30.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url")}.test`,
+    BLOB_STORE_ID: "",
   };
   for (const [name, value] of Object.entries(env)) {
     const original = process.env[name];
