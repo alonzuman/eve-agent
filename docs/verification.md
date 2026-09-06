@@ -2,6 +2,12 @@
 
 Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly provisioned Vercel project.
 
+## Personality PR integration
+
+- Rebased the personality changes onto `947dea3`, retaining the newer Linq typing-pacing implementation and its tests.
+- Node.js 24.20.0: typecheck, all 60 automated tests, and the application build pass on the combined code.
+- GitHub Actions now runs `npm run build` after `npm run check`. Model-backed evals remain explicit credentialed checks through the documented npm scripts.
+
 ## Personality regression fix — local verification
 
 - Node.js 24.20.0: typecheck, all 55 automated tests, and the final application build pass.
