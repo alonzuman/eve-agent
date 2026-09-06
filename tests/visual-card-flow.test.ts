@@ -73,6 +73,7 @@ test("real Linq adapter sends a rendered batch once, preserves references and re
   const attachments: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
+    if (request.url.endsWith("/chats/chat-a/typing")) return new Response(null, { status: 204 });
     if (request.url.endsWith("/attachments")) {
       const body = await request.json() as { filename: string; content_type: string; size_bytes: number };
       assert.equal(body.content_type, "image/png"); assert.ok(body.size_bytes > 100);
@@ -97,16 +98,23 @@ test("real Linq adapter sends a rendered batch once, preserves references and re
   });
   const { adapter } = channel as unknown as { adapter: {
     createAdapterContext(input: unknown): object;
+    "turn.started"(data: unknown, context: unknown): Promise<void>;
     "action.result"(data: unknown, context: unknown): Promise<void>;
   } };
-  const channelContext = { ...adapter.createAdapterContext({ state: { thread: null } }), thread: { id: "linq:chat-a:dm", isDM: true } };
+  const channelContext = adapter.createAdapterContext({ state: { thread: {
+    _type: "chat:Thread", adapterName: "linq", channelId: "linq:chat-a", id: "linq:chat-a", isDM: true,
+  } } });
   let context = freshContext("session-a");
+  const coordinates = { turnId: "turn-1", sequence: 1, stepIndex: 0 };
+  await contextStorage.run(context, () => adapter["turn.started"](coordinates, channelContext));
   const execute = async (input: Parameters<NonNullable<typeof presentCards.execute>>[0], callId: string) =>
     await contextStorage.run(context, () => presentCards.execute!(input, toolContext(callId))) as { status: string; lastSent?: { set: CardSet; messageId: string } | null };
-  const dispatch = (output: unknown, callId: string, destination = channelContext) => contextStorage.run(context, () => adapter["action.result"]({ result: { kind: "tool-result", callId, toolName: "present_cards", output } }, destination));
+  const dispatch = (output: unknown, callId: string, destination = channelContext) => contextStorage.run(context, () => adapter["action.result"]({ ...coordinates, result: { kind: "tool-result", callId, toolName: "present_cards", output } }, destination));
   const queued = await execute({ action: "present", ...set }, "present-1");
   assert.equal(queued.status, "queued"); assert.equal(sends, 0);
   await assert.rejects(dispatch(queued, "present-1", { ...channelContext, thread: { id: "linq:group", isDM: false } }), /private Linq chat/);
+  await assert.rejects(dispatch(queued, "present-1", { ...channelContext, thread: { id: "linq:chat-b", isDM: true } }), /another conversation/);
+  assert.equal(uploads, 0, "foreign chats must be rejected before uploading private card images");
   const preparedStatus = await execute({ action: "status" }, "status-0");
   assert.equal(preparedStatus.status, "prepared");
   await dispatch(preparedStatus, "status-0");

@@ -37,6 +37,8 @@ Admission checks the verified signed sender against the environment variable syn
 
 Every accepted sender gets a stable ownership identity and an account principal that changes on reset. eve owns durable sessions and default memory; application browser tools derive their scope from verified session auth, never a model-supplied user ID. A private, immutable Blob record pins each Linq conversation to its first sender and rejects later owner changes. The HTTP session API is restricted to internal project service/runtime access and local development because eve's generic route auth does not itself enforce session ownership.
 
+Ordinary text, visual-card delivery, and failure notices also check the reply route before sending. Each successful turn-start binding records the session and turn in durable channel state. Subsequent events must match that route, the authenticated principal, and the bound private chat. A failed binding clears the route: Eve catches channel-handler errors and continues its stream, so throwing at turn start alone cannot prevent later sends. Terminal session failures use only a previously verified route for that same session. A session restored mid-turn without this new route state withholds output until its next successfully bound turn.
+
 ## Start fresh with `!reset`
 
 Send exactly `!reset` in a private text message (surrounding whitespace is allowed). The command is case-sensitive and must have no attachments. A sentence mentioning `!reset` remains an ordinary message. Signature, sender allowlist, private-chat verification, and immutable ownership checks all run before account access or reset.
@@ -52,6 +54,8 @@ The route wrapper uses Eve's public `from(address).reset()` operation because th
 ## Verification
 
 Run `npm run check`. The local checks cover distinct users, current/initiator mismatches, groups, wrong lines, missing identities, concurrent owner claims, storage failure, exact allowlist matching without network requests, missing/empty/malformed environment configuration, and revocation in an existing conversation. Route tests exercise signed/unsigned/tampered/expired webhooks and verify that blocked messages and reactions return successfully without replies, read receipts, or session dispatch.
+
+Reply-routing tests use the pinned Eve dispatcher and Linq adapter with fake HTTP, including overlapping users, restored steps, a rejected chat binding followed by text/failure events, changed auth, unbound sessions, and foreign turn/session events. Card tests reject another user's chat before uploading images. Concurrent signed webhook tests preserve each sender's continuation address, auth, and provider thread across account resets.
 
 Reset tests cover first-message resets, exact command matching, cross-chat account rotation, concurrent requests, old webhook replays, partial failure recovery, and signed route dispatch. For live acceptance, teach two users different harmless facts, create browser state for each, then send `!reset` from one user. Verify the confirmation arrives, their next message has no prior history or saved facts, their browser uses a fresh Kernel project, and the second user's conversation is unchanged.
 

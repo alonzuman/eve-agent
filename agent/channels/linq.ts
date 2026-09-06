@@ -9,10 +9,11 @@ import { cardCaption } from "../../src/visual/cards.js";
 import { createLinqDeliveryEvents } from "../../src/messaging/linq-delivery.js";
 import { stopLinqTyping } from "../../src/messaging/linq-typing.js";
 import {
-  bindMessageConversation, boundMessageConversation, inboundMessageParts, messageScope,
+  boundMessageConversation, inboundMessageParts, messageScope,
 } from "../../src/messaging/message-references.js";
 import { messageStore } from "../../src/messaging/message-store.js";
 import { beginMessageActions, stopMessageActions } from "../../src/messaging/linq-message-actions.js";
+import { bindLinqReplyRoute, requireLinqFailureRoute, requireLinqReplyRoute } from "../../src/messaging/linq-reply-routing.js";
 
 const deliveryEvents = createLinqDeliveryEvents(stopLinqTyping, {
   async recordSent(threadId, text, receipt) {
@@ -43,27 +44,42 @@ export default resettableLinqChannel({
     ...deliveryEvents,
     async "turn.started"(event, channel, ctx) {
       if (event.turnId !== ctx.session.turn.id || event.sequence !== ctx.session.turn.sequence) return;
-      if (!channel.thread?.isDM) throw new Error("Message references require a private Linq chat.");
-      bindMessageConversation(ctx, channel.thread.id);
+      bindLinqReplyRoute(event, channel, ctx);
       beginMessageActions(event);
       await deliveryEvents["turn.started"](event, channel);
     },
-    async "turn.completed"(event, channel) {
+    async "message.appended"(event, channel, ctx) {
+      requireLinqReplyRoute(event, channel, ctx);
+      await deliveryEvents["message.appended"](event, channel);
+    },
+    async "message.completed"(event, channel, ctx) {
+      requireLinqReplyRoute(event, channel, ctx);
+      await deliveryEvents["message.completed"](event, channel);
+    },
+    async "turn.completed"(event, channel, ctx) {
+      requireLinqReplyRoute(event, channel, ctx);
       stopMessageActions(event);
       await deliveryEvents["turn.completed"](event, channel);
     },
-    async "turn.cancelled"(event, channel) {
+    async "turn.cancelled"(event, channel, ctx) {
+      requireLinqReplyRoute(event, channel, ctx);
       stopMessageActions(event);
       await deliveryEvents["turn.cancelled"](event, channel);
     },
-    async "turn.failed"(event, channel) {
+    async "turn.failed"(event, channel, ctx) {
+      requireLinqReplyRoute(event, channel, ctx);
       stopMessageActions(event);
       await deliveryEvents["turn.failed"](event, channel);
     },
-    async "action.result"({ result }, channel, ctx) {
+    async "session.failed"(event, channel) {
+      requireLinqFailureRoute(event.sessionId, channel);
+      await deliveryEvents["session.failed"](event, channel);
+    },
+    async "action.result"(event, channel, ctx) {
       requireUserScope(ctx);
-      const presentation = toolResultFrom(result, presentCards);
+      const presentation = toolResultFrom(event.result, presentCards);
       if (!presentation || presentation.output.status !== "queued") return;
+      requireLinqReplyRoute(event, channel, ctx);
       const { current } = visualCardsState.get();
       if (!current || current.id !== presentation.output.setId) return;
       if (!channel.thread?.isDM) throw new Error("Visual cards require the originating private Linq chat.");

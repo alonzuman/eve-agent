@@ -146,7 +146,7 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
   type Args = Parameters<typeof httpRoute.handler>[1];
   const delivered: { address: string; content: unknown; options: { auth: {
     authenticator: string; issuer: string; principalType: string; principalId: string; attributes: {};
-  } } }[] = [];
+  }; state: { thread: { id: string; isDM: boolean } } } }[] = [];
   const retired: string[] = [];
   let resetFails = false;
   const pending: Promise<unknown>[] = [];
@@ -241,5 +241,18 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
   await send("hi after recovery");
   assert.equal(delivered.length, count + 1);
   assert.notEqual(delivered.at(-1)!.address, freshAlice.address);
+  const overlapStart = delivered.length;
+  await Promise.all([send("overlapping Alice", alice, "chat-a"), send("overlapping Bob", bob, "chat-b")]);
+  const overlapping = delivered.slice(overlapStart);
+  assert.equal(overlapping.length, 2);
+  const aliceDelivery = overlapping.find(entry => entry.options.state.thread.id === "linq:chat-a")!;
+  const bobDelivery = overlapping.find(entry => entry.options.state.thread.id === "linq:chat-b")!;
+  assert.deepEqual(aliceDelivery.content, { message: "overlapping Alice", context: [] });
+  assert.deepEqual(bobDelivery.content, { message: "overlapping Bob", context: [] });
+  assert.notEqual(aliceDelivery.address, bobDelivery.address);
+  assert.notEqual(aliceDelivery.options.auth.principalId, bobDelivery.options.auth.principalId);
+  assert.equal(bobDelivery.address, oldBob.address);
+  assert.equal(aliceDelivery.options.state.thread.isDM, true);
+  assert.equal(bobDelivery.options.state.thread.isDM, true);
   assert.equal(errors.mock.calls.filter(call => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
 });
