@@ -24,6 +24,16 @@ export const cardsSchema = canvasSchema.extend({
   })).min(1).max(5),
 });
 export type CardSet = z.infer<typeof cardsSchema>;
+// Model providers require an object at the root of every tool input schema.
+export const presentCardsInputSchema = cardsSchema.partial().extend({
+  action: z.enum(["present", "status", "retry"]),
+}).superRefine((input, ctx) => {
+  if (input.action !== "present") return;
+  const result = cardsSchema.safeParse(input);
+  if (!result.success) {
+    for (const issue of result.error.issues) ctx.addIssue({ ...issue });
+  }
+});
 export const cardSetId = (set: CardSet, callId: string) => createHash("sha256").update(JSON.stringify([callId, set])).digest("hex");
 export const cardSendKey = (sessionId: string, setId: string) => createHash("sha256").update(JSON.stringify(["visual-cards", sessionId, setId])).digest("hex");
 

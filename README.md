@@ -88,6 +88,16 @@ npm run build
 
 Use a development database in `.env.local`; the migration step needs a database URL. The Neon integration must expose credentials to Development for `vercel env pull` to include them. The real Postgres integration tests run when `TEST_DATABASE_URL` points at an isolated test database; see [database verification](docs/database.md#verification).
 
+For a local development server with terminal logs and no terminal chat UI, run:
+
+```sh
+bun run dev --no-ui --host 127.0.0.1 --port 2000
+```
+
+Wait for the listening URL, then leave the process running while you edit; eve rebuilds on changes. In Eve Studio, open this project and use **Chat → Local**. Studio can also start the development server with its **Start** button. The local health endpoint is `http://127.0.0.1:2000/eve/v1/health`. Use `bunx eve traces` to inspect local traces, or `bun run dev` for eve's terminal chat UI.
+
+`bun start` serves the last production build; use `bun run build` first when testing that output. Satori stays external in `agent/agent.ts` so its HarfBuzz WASM file remains resolvable in both development and built servers.
+
 The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Search and browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. Tests cover search, browser isolation, streaming delivery, message references, action receipts, send failures, idempotency keys, and identity/webhook checks.
 
 ## Acceptance after credentials are connected

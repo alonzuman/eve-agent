@@ -5,8 +5,9 @@ import { PassThrough } from "node:stream";
 import https from "node:https";
 import dns from "node:dns/promises";
 import sharp from "sharp";
+import { asSchema } from "ai";
 import { fetchOptionImage, isPublicAddress } from "../src/visual/fetch-image.js";
-import { cardsSchema, cardSetId, cardSendKey } from "../src/visual/cards.js";
+import { cardsSchema, cardSetId, cardSendKey, presentCardsInputSchema } from "../src/visual/cards.js";
 import { renderCard, cardTree } from "../src/visual/render-card.js";
 import { deliverCards } from "../src/visual/deliver-cards.js";
 
@@ -17,6 +18,18 @@ export const sampleSet = cardsSchema.parse({
     props: { TITLE: `Bouquet ${index + 1} & greenery` },
     label: `Bouquet ${index + 1} — $65 USD + delivery`, sourceUrl: `https://example.com/product/${index}`,
   })),
+});
+
+test("card tool exposes an object schema to model providers and validates action payloads", async () => {
+  const schema = await asSchema(presentCardsInputSchema).jsonSchema;
+  assert.equal(schema.type, "object");
+  assert.equal(schema.anyOf, undefined);
+  assert.equal(schema.oneOf, undefined);
+  for (const action of ["status", "retry"]) assert.equal(presentCardsInputSchema.safeParse({ action }).success, true);
+  assert.equal(presentCardsInputSchema.safeParse({ action: "present" }).success, false);
+  assert.equal(presentCardsInputSchema.safeParse({ action: "present", ...sampleSet }).success, true);
+  assert.equal(presentCardsInputSchema.safeParse({ action: "present", ...sampleSet, cards: [] }).success, false);
+  assert.equal(presentCardsInputSchema.safeParse({ action: "send" }).success, false);
 });
 
 test("card inputs bound batch size, canvas dimensions, markup and props", () => {

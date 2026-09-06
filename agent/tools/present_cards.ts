@@ -1,17 +1,12 @@
 import { defineTool } from "eve/tools";
-import { z } from "zod";
 import { requireUserScope } from "../../src/identity/user-scope.js";
-import { cardSetId, cardsSchema } from "../../src/visual/cards.js";
+import { cardSetId, cardsSchema, presentCardsInputSchema } from "../../src/visual/cards.js";
 import { visualCardsState } from "../../src/visual/card-state.js";
 import { CardTemplateError, renderCard } from "../../src/visual/render-card.js";
 
 export default defineTool({
   description: "Render and send 1–5 visual cards to the current private iMessage chat. Each card takes HTML with inline Satori flexbox CSS and a map of string props for {{PLACEHOLDERS}}. Compose layouts for researched options, summaries, plans, or other useful visuals. For comparisons use 3–5 numbered cards with real photos, exact prices and details; img src may be a prop containing an observed public HTTPS photo URL. action=present prepares and queues the batch; action=status must confirm a Linq messageId before claiming sent. action=retry reuses prepared cards after failure. status also returns lastSent for numbered follow-up references. No recipient is accepted.",
-  inputSchema: z.discriminatedUnion("action", [
-    cardsSchema.extend({ action: z.literal("present") }),
-    z.object({ action: z.literal("status") }),
-    z.object({ action: z.literal("retry") }),
-  ]),
+  inputSchema: presentCardsInputSchema,
   async execute(input, ctx) {
     requireUserScope(ctx);
     const { current, lastSent } = visualCardsState.get();
