@@ -26,12 +26,13 @@ function fixture(post?: (text: string) => Promise<void>, stopTyping?: () => Prom
       async startTyping() { typingCount++; isTyping = true; },
     },
   };
+  // Keep extraction tests fast; pacing tests below control their own sleeper.
   const events = createLinqDeliveryEvents(async threadId => {
     assert.equal(threadId, channel.thread?.id);
     await stopTyping?.();
     typingStops++;
     isTyping = false;
-  });
+  }, { sleep: async () => {} });
   return { events, channel, sent, typingCount: () => typingCount, typingStops: () => typingStops, isTyping: () => isTyping };
 }
 
@@ -78,13 +79,15 @@ test("waits for each send, preserves order, and refreshes typing while generatin
   release.resolve();
   await sending;
   assert.deepEqual(sent, ["one", "two"]);
-  assert.equal(typingCount(), 2);
+  assert.equal(typingCount(), 3);
   await events["message.completed"](complete("one\n\ntwo\n\nthree"), channel);
   assert.deepEqual(sent, ["one", "two", "three"]);
 });
 
 test("tool-step acknowledgments and multiple messages within one step remain distinct", async () => {
-  const { events, channel, sent } = fixture();
+  const delays: number[] = [];
+  const events = createLinqDeliveryEvents(async () => {}, { sleep: async ms => { delays.push(ms); } });
+  const { channel, sent } = fixture();
   await events["message.appended"](delta("checking availability"), channel);
   await events["message.completed"](complete("checking availability", 0, "tool-calls"), channel);
   // Eve may continue emitting text after an inline tool without advancing the step.
@@ -93,6 +96,85 @@ test("tool-step acknowledgments and multiple messages within one step remain dis
   await events["message.appended"](delta("here's the link", 1), channel);
   await events["message.completed"](complete("here's the link", 1), channel);
   assert.deepEqual(sent, ["checking availability", "found a table", "7 pm works", "here's the link"]);
+  assert.equal(delays.length, 3, "only the first bubble in the entire turn skips the delay");
+});
+
+test("the first bubble is immediate and subsequent bubbles type and wait before sending", async () => {
+  const release = Promise.withResolvers<void>();
+  const waiting = Promise.withResolvers<void>();
+  const actions: string[] = [];
+  const { channel, sent } = fixture(async text => { actions.push(`send:${text}`); });
+  channel.thread!.startTyping = async () => { actions.push("typing"); };
+  const events = createLinqDeliveryEvents(async () => {}, {
+    random: () => 0.5,
+    sleep: async ms => { actions.push(`wait:${ms}`); waiting.resolve(); await release.promise; },
+  });
+  await events["turn.started"](turn, channel);
+  const sending = events["message.appended"](delta("first\n\n0123456789\n\nlast"), channel);
+  await waiting.promise;
+  assert.deepEqual(sent, ["first"]);
+  assert.deepEqual(actions, ["typing", "send:first", "typing", "wait:500"]);
+  release.resolve();
+  await sending;
+  await events["message.completed"](complete("first\n\n0123456789\n\nlast"), channel);
+  assert.deepEqual(sent, ["first", "0123456789", "last"]);
+  assert.deepEqual(actions.slice(4), ["send:0123456789", "typing", "typing", "wait:400", "send:last"]);
+});
+
+test("delays scale with Unicode text length, vary slightly, and stay bounded", async () => {
+  for (const [text, random, expected] of [
+    ["hi", 0.5, 400],
+    ["🙌".repeat(8), 0.5, 450],
+    ["a".repeat(30), 0, 850],
+    ["a".repeat(30), 0.5, 1000],
+    ["a".repeat(30), 1, 1150],
+    ["a".repeat(100), 0.5, 2750],
+    ["a".repeat(10_000), 0.5, 4000],
+  ] as const) {
+    const delays: number[] = [];
+    const events = createLinqDeliveryEvents(async () => {}, { random: () => random, sleep: async ms => { delays.push(ms); } });
+    const { channel, sent } = fixture();
+    await events["message.completed"](complete(`first\n\n${text}`), channel);
+    assert.deepEqual(delays, [expected]);
+    assert.deepEqual(sent, ["first", text]);
+  }
+});
+
+test("pacing survives serialization, ignores empty bubbles, and resets only for a new turn", async () => {
+  const delays: number[] = [];
+  const events = createLinqDeliveryEvents(async () => {}, { sleep: async ms => { delays.push(ms); } });
+  const alice = fixture(), bob = fixture();
+  await events["message.completed"](complete("\n\n \n\nfirst"), alice.channel);
+  assert.deepEqual(delays, []);
+  alice.channel.state = JSON.parse(JSON.stringify(alice.channel.state));
+  await events["message.completed"](complete("second", 1), alice.channel);
+  await events["message.completed"](complete("bob's first"), bob.channel);
+  assert.equal(delays.length, 1);
+  const next = { turnId: "turn_1", sequence: 1 };
+  await events["turn.started"](next, alice.channel);
+  await events["message.completed"]({ ...complete("next first"), ...next }, alice.channel);
+  assert.equal(delays.length, 1);
+  await events["message.completed"]({ ...complete("next second", 1), ...next }, alice.channel);
+  assert.equal(delays.length, 2);
+  assert.deepEqual(alice.sent, ["first", "second", "next first", "next second"]);
+});
+
+test("cancellation, replacement, and thread loss during a pause discard unsent bubbles", async () => {
+  for (const interruption of ["cancel", "replace", "disconnect"] as const) {
+    const release = Promise.withResolvers<void>();
+    const waiting = Promise.withResolvers<void>();
+    const events = createLinqDeliveryEvents(async () => {}, { sleep: async () => { waiting.resolve(); await release.promise; } });
+    const { channel, sent } = fixture();
+    const sending = events["message.appended"](delta("first\n\nqueued\n\nlast"), channel);
+    await waiting.promise;
+    if (interruption === "cancel") await events["turn.cancelled"](turn, channel);
+    else if (interruption === "replace") await events["turn.started"]({ turnId: "turn_1", sequence: 1 }, channel);
+    else channel.thread = null;
+    release.resolve();
+    await sending;
+    await events["message.completed"](complete("first\n\nqueued\n\nlast"), channel);
+    assert.deepEqual(sent, ["first"], interruption);
+  }
 });
 
 test("cancellation discards pending bubbles, blocks late events, and allows the next turn", async () => {
@@ -126,6 +208,28 @@ test("a replacement turn also stops an outstanding send loop", async () => {
   release.resolve();
   await sending;
   assert.deepEqual(sent, ["one"]);
+});
+
+test("a late typing failure from an old turn cannot stop its replacement", async () => {
+  const release = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const { events, channel, sent } = fixture();
+  await events["message.completed"](complete("first"), channel);
+  channel.thread!.startTyping = async () => {
+    started.resolve();
+    await release.promise;
+    throw new Error("typing failed");
+  };
+  const sending = events["message.completed"](complete("second", 1), channel);
+  const failed = assert.rejects(sending, /typing failed/);
+  await started.promise;
+  channel.thread!.startTyping = async () => {};
+  const next = { turnId: "turn_1", sequence: 1 };
+  await events["turn.started"](next, channel);
+  release.resolve();
+  await failed;
+  await events["message.completed"]({ ...complete("replacement"), ...next }, channel);
+  assert.deepEqual(sent, ["first", "replacement"]);
 });
 
 test("failed sends stop later bubbles and are not retried by completion", async () => {
@@ -260,15 +364,21 @@ test("buffer state stays private to each session and survives serialization", as
 });
 
 test("optional typing support and absent threads do not break the stream", async () => {
-  const { events, channel, sent } = fixture();
+  const delays: number[] = [];
+  const events = createLinqDeliveryEvents(async () => {}, { sleep: async ms => { delays.push(ms); } });
+  const { channel, sent } = fixture();
   channel.thread!.startTyping = async () => { throw Object.assign(new Error("unsupported"), { code: "NOT_IMPLEMENTED" }); };
   await events["turn.started"](turn, channel);
   await events["message.appended"](delta("one\n\n"), channel);
   assert.deepEqual(sent, ["one"]);
-  channel.thread = null;
   await events["message.completed"](complete("two", 1), channel);
+  assert.deepEqual(sent, ["one", "two"]);
+  assert.equal(delays.length, 1, "unsupported typing indicators still get a send delay");
+  channel.thread = null;
+  await events["message.completed"](complete("three", 2), channel);
+  assert.deepEqual(sent, ["one", "two"]);
   await events["turn.completed"](turn, channel);
-  assert.deepEqual(sent, ["one"]);
+  assert.equal(delays.length, 1, "no thread means no delay or send");
 });
 
 test("Eve's real emitter delivers bubbles before generation ends and separates private reasoning", async () => {

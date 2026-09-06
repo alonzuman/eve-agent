@@ -8,6 +8,7 @@ type Turn = { turnId: string; sequence: number };
 type StopTyping = (threadId: string) => Promise<void>;
 
 interface BubbleStream extends Turn {
+  sentCount: number;
   stepIndex: number;
   pending: string;
   receivedDeltas: boolean;
@@ -29,13 +30,12 @@ interface DeliveryChannel {
   } | null;
 }
 
-function stop(channel: DeliveryChannel): void {
-  const stream = channel.state.bubbleStream;
+function stop(channel: DeliveryChannel, stream = channel.state.bubbleStream): void {
   if (stream) {
     stream.stopped = true;
     stream.pending = "";
   }
-  channel.state.pendingToolCallMessage = null;
+  if (channel.state.bubbleStream === stream) channel.state.pendingToolCallMessage = null;
 }
 
 function forTurn(channel: DeliveryChannel, event: Turn): BubbleStream | undefined {
@@ -48,7 +48,7 @@ function forTurn(channel: DeliveryChannel, event: Turn): BubbleStream | undefine
     stop(channel);
   }
   const stream: BubbleStream = {
-    turnId: event.turnId, sequence: event.sequence,
+    turnId: event.turnId, sequence: event.sequence, sentCount: 0,
     stepIndex: -1, pending: "", receivedDeltas: false, completed: false, stopped: false,
   };
   channel.state.bubbleStream = stream;
@@ -77,18 +77,38 @@ async function typing(channel: DeliveryChannel): Promise<void> {
   }
 }
 
-async function send(channel: DeliveryChannel, stream: BubbleStream, text: string): Promise<void> {
+interface DeliveryTiming {
+  random(): number;
+  sleep(ms: number): Promise<void>;
+}
+
+function typingDelayMs(text: string, random: number): number {
+  // Tune conversational pacing here: 250 ms to start, 25 ms per Unicode code
+  // point, and ±15% variation. Bound very short and very long messages.
+  const estimate = (250 + Array.from(text).length * 25) * (0.85 + random * 0.3);
+  return Math.round(Math.min(4_000, Math.max(400, estimate)));
+}
+
+async function send(channel: DeliveryChannel, stream: BubbleStream, text: string, timing: DeliveryTiming): Promise<void> {
   if (!text || stream.stopped || !channel.thread) return;
   try {
+    if (stream.sentCount > 0) {
+      await typing(channel);
+      if (stream.stopped || !channel.thread) return;
+      await timing.sleep(typingDelayMs(text, timing.random()));
+      // Cancellation or a replacement turn can arrive while typing or waiting.
+      if (stream.stopped || !channel.thread) return;
+    }
     await channel.thread.post(text);
+    stream.sentCount = (stream.sentCount ?? 0) + 1;
   } catch (error) {
     // Don't send later bubbles or automatically retry an ambiguous provider send.
-    stop(channel);
+    stop(channel, stream);
     throw error;
   }
 }
 
-async function drain(channel: DeliveryChannel, stream: BubbleStream): Promise<boolean> {
+async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: DeliveryTiming): Promise<boolean> {
   let sent = false;
   // Keep the unconsumed suffix, including a delimiter split across delta chunks.
   // A single LF/CRLF inside a bubble is preserved verbatim.
@@ -96,7 +116,7 @@ async function drain(channel: DeliveryChannel, stream: BubbleStream): Promise<bo
     const text = stream.pending.slice(0, boundary.index).trim();
     stream.pending = stream.pending.slice(boundary.index + boundary[0].length);
     if (text) {
-      await send(channel, stream, text);
+      await send(channel, stream, text, timing);
       sent = true;
     }
   }
@@ -132,9 +152,14 @@ async function failure(channel: DeliveryChannel, stopTyping: StopTyping): Promis
   }
 }
 
-// Eve serializes stream event handling. Await each post so bubbles retain order;
+// Eve serializes stream event handling. Await each pause and post to retain order;
 // no detached queue, provider client, custom send tool, or post-and-edit streaming.
-export function createLinqDeliveryEvents(stopTyping: StopTyping) {
+export function createLinqDeliveryEvents(stopTyping: StopTyping, overrides: Partial<DeliveryTiming> = {}) {
+  const timing: DeliveryTiming = {
+    random: () => Math.random(),
+    sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+    ...overrides,
+  };
   return {
     async "turn.started"(event: Event<"turn.started">, channel: DeliveryChannel) {
       const stream = forTurn(channel, event);
@@ -153,7 +178,7 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping) {
       }
       stream.receivedDeltas = true;
       stream.pending += event.messageDelta;
-      if (await drain(channel, stream) && !stream.stopped) await typing(channel);
+      if (await drain(channel, stream, timing) && !stream.stopped) await typing(channel);
     },
     async "message.completed"(event: Event<"message.completed">, channel: DeliveryChannel) {
       const stream = forMessage(channel, event);
@@ -169,10 +194,10 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping) {
       // A completion repeats the full message; only flush the unsent suffix.
       // Also support a complete message from a provider that emitted no deltas.
       if (!stream.receivedDeltas) stream.pending = event.message;
-      await drain(channel, stream);
+      await drain(channel, stream, timing);
       const tail = stream.pending.trim();
       stream.pending = "";
-      await send(channel, stream, tail);
+      await send(channel, stream, tail, timing);
     },
     async "turn.cancelled"(event: Event<"turn.cancelled">, channel: DeliveryChannel) {
       const stream = forTurn(channel, event);
