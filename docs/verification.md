@@ -5,9 +5,10 @@ Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly
 ## Personality PR integration
 
 - Rebased the personality changes onto `7effe63`, retaining typing pacing, shopping, visual cards, Postgres message actions, and isolated local tool testing.
-- Node.js 24.20.0: typecheck, all 67 automated tests, and the application build pass on the combined code. Tests include strict judge responses, bounded malformed-response retries, and preservation of valid failing grades.
+- Node.js 24: typecheck, database migration validation, 77 automated tests, and the application build pass on the combined code. One Postgres integration test is skipped without `TEST_DATABASE_URL`. Tests include strict judge responses, bounded malformed-response retries, and preservation of valid failing grades.
 - GitHub Actions now runs `npm run build` after `npm run check`. Model-backed evals remain explicit credentialed checks through the documented npm scripts. The build check also initializes the packaged HarfBuzz engine to catch missing WebAssembly assets.
 - The hardened Sol candidate passed all 31 model-backed cases (conversation, fifteen social repetitions, and shopping): 191 gates and 83 contextual judgments. Six separate judge-calibration samples accepted both valid replies and rejected all four known bad replies.
+- The owner selected Luna for production because of cost. Model-backed evals are manual diagnostics and do not run in CI; the historical Sol result above is not a claim about the final Luna configuration.
 
 ## Personality regression fix — local verification
 
