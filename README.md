@@ -60,6 +60,10 @@ The Developer plan has a $0 monthly base fee; browser usage is metered. Producti
 
 To send a screenshot, the agent navigates a real Kernel browser, captures with `computer_action`, calls `send_browser_screenshot` with `action: "send"`, then checks `action: "status"`. The Linq channel retains the latest native PNG/JPEG capture in session state and uploads its bytes through Linq's attachment API. The destination comes from the originating private chat, never model input. Internal screenshots are not automatically sent. Sends use a stable per-session/per-capture idempotency key. A `sent` receipt means Linq accepted the message; arrival on the phone remains an end-to-end acceptance check.
 
+## Visual replies
+
+The agent can compose one to five image cards using `present_cards`, with HTML templates and string props. The generic `renderCard({ html, props })` API uses Satori and resvg to produce PNG attachments. Cards can show researched photos, prices, comparisons, plans, or other visual summaries. A batch is sent in one Linq message; iMessage chooses its native collage or stack layout. Numbered labels and source links are retained for replies such as “option 2.” See [rendering, templates, and delivery](docs/visual-cards.md). Live phone rendering still needs an acceptance check after deployment.
+
 ## Development and checks
 
 ```sh
