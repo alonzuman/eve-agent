@@ -30,7 +30,7 @@ Text `!reset` by itself to start fresh. Eve retires the sender's registered conv
 
 Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
 
-The agent can also react with emoji or reply to a specific message part. These tools resolve short references through Postgres and always use the authenticated current chat. An accepted tool result means Linq accepted the request. Ordinary replies still stream as assistant text.
+The agent promptly acknowledges requests with fitting emoji reactions and defaults to answering in threads attached to the specific request. These tools resolve short references through Postgres and always use the authenticated current chat. An accepted tool result means Linq accepted the request. Standalone conversation and replies without an available target still stream as assistant text.
 
 ## Response allowlist
 
