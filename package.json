@@ -12,10 +12,11 @@
     "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm run db:check && npm test",
-    "eval:conversation": "eve eval conversation --strict",
+    "eval:conversation": "eve eval --tag conversation --strict",
     "eval:shopping": "eve eval shopping --strict",
     "eval:shopping-browser": "node --env-file=.env.local --import tsx scripts/check-shopping-browser.ts",
-    "deploy": "vercel deploy --prod"
+    "deploy": "vercel deploy --prod",
+    "eval:voice-stability": "eve eval --tag voice-stability --strict"
   },
   "repository": {
     "type": "git",
@@ -38,6 +39,7 @@
     "drizzle-orm": "0.45.2",
     "entities": "8.0.0",
     "eve": "0.52.2",
+    "harfbuzzjs": "0.10.0",
     "ipaddr.js": "^2.5.0",
     "pg": "8.23.0",
     "satori": "0.33.4",

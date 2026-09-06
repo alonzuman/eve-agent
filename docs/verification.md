@@ -2,6 +2,23 @@
 
 Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly provisioned Vercel project.
 
+## Personality PR integration
+
+- Rebased the personality changes onto `7effe63`, retaining typing pacing, shopping, visual cards, Postgres message actions, and isolated local tool testing.
+- Node.js 24: typecheck, database migration validation, 77 automated tests, and the application build pass on the combined code. One Postgres integration test is skipped without `TEST_DATABASE_URL`. Tests include strict judge responses, bounded malformed-response retries, and preservation of valid failing grades.
+- GitHub Actions now runs `npm run build` after `npm run check`. Model-backed evals remain explicit credentialed checks through the documented npm scripts. The build check also initializes the packaged HarfBuzz engine to catch missing WebAssembly assets.
+- The hardened Sol candidate passed all 31 model-backed cases (conversation, fifteen social repetitions, and shopping): 191 gates and 83 contextual judgments. Six separate judge-calibration samples accepted both valid replies and rejected all four known bad replies.
+- The owner selected Luna for production because of cost. Model-backed evals are manual diagnostics and do not run in CI; the historical Sol result above is not a claim about the final Luna configuration.
+
+## Personality regression fix — local verification
+
+- Node.js 24.20.0: typecheck, all 55 automated tests, and the final application build pass.
+- Outgoing Gateway requests in a baseline reproduction contain the standing voice rules on every turn. The original six evals passed while the reported small-talk conversation failed repeatedly. Changing only the model to Luna still failed four of five fresh sessions.
+- The revised writer framing, compact voice examples, per-turn composition request, and `openai/gpt-5.6-luna` passed all 16 cases in `.eve/evals/2026-09-06T23-09-28/`: eleven conversation cases plus five fresh small-talk repetitions, with 85 deterministic gates and 38 contextual judgments passing. The independent judge remains `anthropic/claude-sonnet-5`.
+- Five more unchanged HTTP repetitions and five with the Linq delivery prompt enabled in a local fixture also passed: 26 cases total, 175 deterministic gates, and 78 contextual judgments. The fixture changes only the delivery-instruction channel condition; it does not exercise phone transport.
+- Coverage includes formal tone, exact case-sensitive text and literal markup, held-out social conversation, and actual `bash` execution in Vercel Sandbox with a verified SHA-256 result. Tests do not send real iMessages or deploy the candidate.
+- See [the investigation](personality-debugging.md) for comparisons and limitations. Earlier sections below describe their respective changes at the time they were tested.
+
 ## Shopping and Exa update — branch verification
 
 - Exa Search API provisioned and connected to the existing Vercel project; a real query returned Upper East Side florist URLs and excerpts.
