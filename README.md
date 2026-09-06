@@ -1,6 +1,6 @@
 # Eve personal assistant
 
-A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. Live send/receive is verified. The current scope is conversation, private file memory, shell/file tools, and isolated Chromium browsing. Link payments and the live flower purchase evaluation are deferred.
+A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. The current scope is conversation, private file memory, shell/file tools, Kernel browsing, and browser screenshot attachments. Link payments and the live flower purchase evaluation are deferred.
 
 ## Deployment
 
@@ -27,9 +27,18 @@ The Linq channel uses eve's session continuation and interruption behavior. HTTP
 
 ## Browser
 
-A reusable Chromium image has already been provisioned and its `AGENT_BROWSER_SNAPSHOT_ID` configured in Vercel. To rebuild it, run `npm run browser:snapshot` after pulling local project credentials. It installs pinned Playwright/Chromium in an empty Vercel Sandbox, verifies the browser can load a page, and prints the new snapshot ID. Update the deployment environment and redeploy. The reusable image never contains a user's cookies.
+The official `@onkernel/eve-extension` is mounted at `agent/extensions/kernel.ts`. Its hosted MCP connection supplies browser lifecycle, Playwright, computer controls, profiles, and managed-auth tools. Eve's shell continues using Vercel Sandbox; the custom Chromium sandbox and image-building scripts have been removed.
 
-The browser tool supports navigation, page reading, clicking, filling, selecting, key presses, and screenshots. Each verified user gets a separate persistent browser sandbox. The browser and eve's shell run in different sandboxes; neither receives the application environment or Blob credentials. Production browser state is separated from development and preview state.
+Kernel authenticates through the attached Vercel Connect connector `kernel/eve-kernel`. Each sender follows the authorization link on first use; grants are associated with their verified Linq identity. No shared `KERNEL_API_KEY` is configured. Kernel permissions are those of the account the sender authorizes; sharing a Kernel account also shares that account's browser resources. Use separate Kernel projects/accounts for environment or account isolation. The obsolete `AGENT_BROWSER_SNAPSHOT_ID` environment variable is no longer read.
+
+For another deployment, create and attach its connector from the project directory, then update the mount with the returned UID:
+
+```sh
+vercel connect create kernel --name eve-kernel --connection-method mcp --yes
+vercel connect attach kernel/eve-kernel --yes
+```
+
+To send a screenshot, the agent navigates a real Kernel browser, captures with `computer_action`, calls `send_browser_screenshot` with `action: "send"`, then checks `action: "status"`. The Linq channel retains the latest native PNG/JPEG capture in session state and uploads its bytes through Linq's attachment API. The destination comes from the originating private chat, never model input. Internal screenshots are not automatically sent. Sends use a stable per-session/per-capture idempotency key. A `sent` receipt means Linq accepted the message; arrival on the phone remains an end-to-end acceptance check.
 
 ## Development and checks
 
@@ -41,16 +50,15 @@ npm run check
 npm run build
 ```
 
-Run `node --env-file=.env.local --import tsx scripts/browser-smoke.ts` for the live two-user browser check. It creates temporary Vercel Sandboxes and deletes them after the check; Sandbox usage may incur charges.
-
-The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user.
+The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Screenshot sending requires a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. The tests cover screenshot validation, original-byte attachment payloads, send failures, idempotency keys, and existing identity/webhook checks.
 
 ## Acceptance after credentials are connected
 
 - Send and receive a real iMessage.
 - Ask the agent to remember a harmless unique fact, then verify it in a later conversation.
-- Use two sender accounts and confirm that memory, sessions, and browser cookies are separate.
+- Use two sender accounts and confirm memory/session isolation and separate Kernel authorization grants.
 - Try a general task such as finding information on a website using the browser.
+- Text “Send me a screenshot of the example.com home page,” complete Kernel authorization if prompted, and verify an image attachment arrives in that same chat. Inspect Agent Runs for browser creation, navigation, screenshot capture, and the Linq message receipt. This live check must pass before declaring the screenshot flow verified.
 - Verify a group message and an invalid webhook signature do not start a conversation.
 
 eve's current Linq adapter deduplicates incoming webhook messages in process. Cross-instance retries can still cause duplicate conversational turns. There is no claim of exactly-once message processing, and payments must not be enabled until separate atomic purchase records and recovery rules are implemented.
