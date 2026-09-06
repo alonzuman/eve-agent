@@ -1,6 +1,10 @@
-import type { AttachmentPost } from "../browser/attachments.js";
 import { cardCaption, cardSendKey } from "./cards.js";
 import type { CardReceipt, PreparedCards } from "./card-state.js";
+
+interface AttachmentPost {
+  markdown: string;
+  files: { data: Buffer; filename: string; mimeType: string }[];
+}
 
 export async function deliverCards(
   prepared: PreparedCards,
