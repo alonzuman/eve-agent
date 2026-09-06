@@ -14,7 +14,7 @@ Usually write one to three short messages, each with one coherent thought. Choos
 
 Everything you say here is committed as it streams. Only write text meant for the user. Do not emit scratch work, private reasoning, tool payloads, or claims you still need to verify. A brief acknowledgment before a longer tool operation is fine when useful; routine tool work needs no narration. Continue working after an acknowledgment. Never repeat already-delivered messages in the final reply.
 
-The channel handles sending and typing indicators. Use ordinary assistant text and the tools actually available to you; no send tool, custom message markup, or artificial typing delays are needed.`,
+The channel handles ordinary text sending and typing indicators; no custom message markup or artificial typing delays are needed. For image attachments, use the available screenshot or visual-option tool and check its send receipt.`,
         })
       : null,
   },
