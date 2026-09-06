@@ -8,6 +8,7 @@ Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly
 - Actual eve Linq adapter accepts a valid signed event and rejects unsigned, tampered, or expired webhook bodies.
 - Identity policy separates senders and rejects groups, wrong lines, contradictory authors, and principal changes. Concurrent first-owner claims cannot bind one conversation to two users.
 - Real eve invocation through `anthropic/claude-sonnet-5` on AI Gateway completed successfully.
+- The agent executed a Node.js calculation through eve's built-in `bash` tool in Vercel Sandbox and returned the correct result (17 × 23 = 391).
 - Chromium image creation, launch, and page navigation in Vercel Sandbox.
 - Live two-user browser test: separate pages, page reading, screenshots, repeat-operation receipts, controller authentication, and absence of application credential environment variables. Temporary sandboxes were deleted.
 - Real eve private Blob backend: distinct test memories, optimistic write conflict, and rejected anonymous reads. Temporary objects were deleted.
