@@ -9,7 +9,7 @@ Configure these encrypted Vercel environment variables with `vercel env add NAME
 - `LINQ_API_KEY`: the existing Linq account's partner API token.
 - `LINQ_WEBHOOK_SECRET`: the signing secret for this webhook subscription.
 - `LINQ_PHONE_NUMBER`: the one existing Linq line assigned to this application, in E.164 format, such as `+12025550100`.
-- `GLOBAL_CONFIG`: the connection string for the Vercel Global Config store holding the `linqResponses` flag and sender allowlist (see below).
+- `FLAGS`: the Vercel Flags server SDK key for the deployment environment (see below).
 - `BLOB_READ_WRITE_TOKEN` or the provisioned `BLOB_STORE_ID` with Vercel OIDC access: the **private** store used by eve and the immutable chat-owner records.
 
 Redeploy after setting environment variables. After the line owner confirms which application should receive that number, create a subscription to `https://<production-domain>/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added` and `reaction.removed`. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format. Preserve any existing application's webhook until its owner approves changing routing. Do not place tokens or webhook secrets in messages, instructions, or source files.
@@ -18,22 +18,22 @@ The handler uses eve's Linq adapter and its built-in signature and timestamp che
 
 ## Response flag and sender allowlist
 
-Create a [Vercel Global Config](https://vercel.com/docs/global-config/global-config-sdk) store (formerly Edge Config), connect it to the project, and set its connection string as `GLOBAL_CONFIG` for each environment that should receive messages. Add an item named `linqResponses` with this value:
+Use the project's [Vercel Flags dashboard](https://vercel.com/docs/flags/vercel-flags/dashboard):
 
-```json
-{
-  "enabled": true,
-  "allowedNumbers": ["+12025550101", "+12025550102"]
-}
-```
+1. Create a **boolean** flag with key `linq-responses` and options `false` and `true`.
+2. In each intended environment, set the fallback outcome and paused outcome to `false`.
+3. Under **Targets**, add each allowed **User ID** to the `true` option. Use exact E.164 **sender** numbers, such as `+12025550101` and `+12025550102`, with no spaces or punctuation. The application passes `{ user: { id: verifiedSenderNumber } }` as the evaluation context. The default User entity supports the `id` attribute.
+4. Enable the flag for that environment. Vercel automatically provisions the environment-specific `FLAGS` SDK key when you create the first flag; verify it is available to the deployment and redeploy once. For local development, pull it with `vercel env pull .env.local --yes`.
 
-Replace the examples with allowed **sender** numbers. Deploy once after connecting the store. Edit this item in the Vercel dashboard to change access without another deployment; updates apply to subsequent messages after config propagation. Use separate stores if preview/development should have different allowed senders.
+Edit targets in the dashboard to grant or revoke access without another deployment. Production, preview, and development have separate targeting configurations selected by their SDK keys. See [SDK keys](https://vercel.com/docs/flags/vercel-flags/dashboard/sdk-keys) and [direct targeting](https://vercel.com/kb/guide/how-vercel-flags-are-evaluated).
 
-Both `enabled` (a boolean) and `allowedNumbers` (an array of exact E.164 strings) are required. `enabled: false` stops admitting messages from everyone. An empty list blocks everyone as well. Missing connection strings/items, invalid configuration (including any malformed number), and provider read errors all fail closed. Email identities are not admitted by the phone allowlist. The reader disables development caching and stale-on-error fallback and does not cache admission decisions.
+Only a boolean `true` result from an explicit target match admits a sender. Rules, rollouts, and a `true` fallback cannot expand the allowlist. Pause the flag to block everyone, regardless of its configured paused outcome. Empty targets, missing SDK keys/flags, malformed values, and evaluation errors fail closed. Email identities are not admitted even if targeted.
+
+The reader uses `@vercel/flags-core` and refreshes definitions for each webhook. Each evaluation starts with an empty fallback instead of a previously cached or embedded allowlist, waits up to two seconds for the initial refresh, then shuts down the client and cancels outstanding reads. Provider failures/timeouts therefore block the message. Numbers are matched locally against the fetched definitions and are not sent as request parameters to the Flags service. Updates apply after Vercel propagates the flag configuration.
 
 Admission uses the verified signed sender handle, checks the flag before reading or creating a chat-owner record, then preserves the existing ownership checks. Rejected messages are acknowledged with HTTP 200 and produce no read receipt or conversational turn; only a fixed rejection reason is logged. Signature verification still runs and invalid signatures return 401. Reaction events remain ignored by eve's Linq channel and do not start turns. Changes apply to existing conversations on their next message, but do not cancel or suppress output from a turn already admitted.
 
-**Rollout:** populate and connect the config before deploying this change to an existing installation. Without it, previously accepted senders will be ignored. Builds and health checks still work without the config.
+**Rollout:** create the flag, populate its targets, and configure `FLAGS` before deploying this change to an existing installation. Without them, previously accepted senders will be ignored. Builds and health checks still work without Flags credentials.
 
 `LINQ_PHONE_NUMBER` is the receiving **agent line**, not the user's personal sender number. Include the leading `+` and country code, with no spaces or punctuation. An incorrectly formatted value caused the initial live messages to be ignored; admission logs now expose a fixed reason such as `configured_line_invalid` without logging message contents, numbers, or credentials.
 
@@ -41,9 +41,9 @@ Every accepted sender gets a stable principal. eve owns durable sessions and def
 
 ## Verification
 
-Run `npm run check`. The local checks cover distinct users, current/initiator mismatches, groups, wrong lines, missing identities, concurrent owner claims, storage failure, allowlist matching, disabled/invalid/unavailable config, and revocation in an existing conversation. Route tests exercise signed/unsigned/tampered/expired webhooks and verify that blocked messages and reactions return successfully without replies, read receipts, or session dispatch.
+Run `npm run check`. The local checks cover distinct users, current/initiator mismatches, groups, wrong lines, missing identities, concurrent owner claims, storage failure, Vercel Flags targeting, paused/invalid/unavailable flags, and revocation in an existing conversation. Route tests exercise signed/unsigned/tampered/expired webhooks and verify that blocked messages and reactions return successfully without replies, read receipts, or session dispatch.
 
-After credentials are connected, allowlist two separate real numbers and send a message from each. Teach each conversation a different fact, then ask each to recall it. Confirm replies go only to the correct sender and browser state stays separate. Send from an unlisted number, remove one previously allowed number, and disable the flag; each blocked message should get no response or read receipt. Restore the list and flag to verify responses resume. These rollout checks require a live deployment.
+After credentials are connected, target two separate real numbers with `true` and send a message from each. Teach each conversation a different fact, then ask each to recall it. Confirm replies go only to the correct sender and browser state stays separate. Send from an unlisted number, remove one previously allowed target, and pause the flag; each blocked message should get no response or read receipt. Restore the targets and enable the flag to verify responses resume. These rollout checks require a live deployment.
 
 ## Duplicate delivery limitation
 

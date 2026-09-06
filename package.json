@@ -26,7 +26,7 @@
   "homepage": "https://github.com/alonzuman/eve-agent#readme",
   "dependencies": {
     "@vercel/blob": "2.8.0",
-    "@vercel/global-config": "1.5.1",
+    "@vercel/flags-core": "1.8.0",
     "@vercel/sandbox": "3.2.1",
     "ai": "7.0.93",
     "eve": "0.52.2",

@@ -1,42 +1,68 @@
-import { createClient } from "@vercel/global-config";
-import { z } from "zod";
+import { createClient, Reason, type EvaluationResult } from "@vercel/flags-core";
 
-// One value keeps the enable flag and its allowlist in the same config revision.
-const responsePolicySchema = z.object({
-  enabled: z.boolean(),
-  allowedNumbers: z.array(z.string().regex(/^\+[1-9]\d{6,14}$/).refine((value) => value === value.trim())),
-});
+export const LINQ_RESPONSES_FLAG = "linq-responses";
+export type EvaluateLinqResponseFlag = (senderHandle: string) => Promise<EvaluationResult<unknown>>;
 
-export type ReadLinqResponsePolicy = () => Promise<unknown>;
-
-/** Resolve lazily so builds work without credentials; read again for every message. */
-export const readLinqResponsePolicy: ReadLinqResponsePolicy = async () => {
-  const connection = process.env.GLOBAL_CONFIG?.trim();
-  if (!connection) return undefined;
-  const client = createClient(connection, {
-    cache: "no-store",
-    disableDevelopmentCache: true,
-    // An outage must not restore an old allowlist or an old enabled flag.
-    staleIfError: false,
+/** Fetch current targeting for each webhook; never fall back to an old allowlist. */
+export const evaluateLinqResponseFlag: EvaluateLinqResponseFlag = async (senderHandle) => {
+  const sdkKey = process.env.FLAGS?.trim();
+  if (!sdkKey) throw new Error("Linq response flag is not configured.");
+  const request = new AbortController();
+  const client = createClient(sdkKey, {
+    buildStep: false,
+    stream: false,
+    polling: { intervalMs: 30_000, initTimeoutMs: 2_000 },
+    // A provided empty datafile takes precedence over embedded definitions if the
+    // initial refresh fails. A new client prevents reuse of a previous allowlist.
+    datafile: { definitions: {}, environment: "unconfigured", projectId: "" },
+    disableMetrics: true,
+    async fetch(input, init) {
+      try {
+        return await fetch(input, {
+          ...init,
+          cache: "no-store",
+          signal: AbortSignal.any([request.signal, ...(init?.signal ? [init.signal] : [])]),
+        });
+      } catch {
+        // The SDK logs fetch errors. Keep credentials and sender data out of them.
+        throw new Error("Linq response flag refresh failed.");
+      }
+    },
   });
-  return client.get<unknown>("linqResponses");
+  try {
+    await client.initialize();
+    return await client.evaluate<unknown>(LINQ_RESPONSES_FLAG, false, { user: { id: senderHandle } });
+  } finally {
+    request.abort();
+    await client.shutdown();
+  }
 };
 
 export async function assessLinqResponseAccess(
   senderHandle: string,
-  readPolicy: ReadLinqResponsePolicy = readLinqResponsePolicy,
+  evaluateFlag: EvaluateLinqResponseFlag = evaluateLinqResponseFlag,
 ) {
-  let value: unknown;
-  try {
-    value = await readPolicy();
-  } catch {
-    // Provider errors can contain credentials; expose only a fixed reason.
-    return { accepted: false as const, reason: "response_policy_unavailable" as const };
+  if (!/^\+[1-9]\d{6,14}$/.test(senderHandle) || senderHandle !== senderHandle.trim()) {
+    return { accepted: false as const, reason: "sender_not_allowlisted" as const };
   }
-  const policy = responsePolicySchema.safeParse(value);
-  if (!policy.success) return { accepted: false as const, reason: "response_policy_invalid" as const };
-  if (!policy.data.enabled) return { accepted: false as const, reason: "responses_disabled" as const };
-  if (!policy.data.allowedNumbers.includes(senderHandle)) {
+  let result: EvaluationResult<unknown>;
+  try {
+    result = await evaluateFlag(senderHandle);
+  } catch {
+    return { accepted: false as const, reason: "response_flag_unavailable" as const };
+  }
+  if (result.reason === Reason.ERROR) {
+    return { accepted: false as const, reason: "response_flag_unavailable" as const };
+  }
+  if (typeof result.value !== "boolean") {
+    return { accepted: false as const, reason: "response_flag_invalid" as const };
+  }
+  if (result.reason === Reason.PAUSED) {
+    return { accepted: false as const, reason: "responses_disabled" as const };
+  }
+  // Require an explicit target. Broad rules or a true fallback must not let
+  // numbers outside the allowlist through, even if the flag is misconfigured.
+  if (result.value !== true || result.reason !== Reason.TARGET_MATCH) {
     return { accepted: false as const, reason: "sender_not_allowlisted" as const };
   }
   return { accepted: true as const };

@@ -16,7 +16,7 @@ A general-purpose eve agent on Vercel, connected to an existing Linq iMessage nu
 First confirm that the existing number's webhook can be routed here. No existing Linq configuration has been changed.
 
 1. Enter `LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, and `LINQ_PHONE_NUMBER` in the project's [Vercel environment settings](https://vercel.com/undefined-software/eve-personal-agent/settings/environment-variables). The phone number must be its full E.164 form, such as `+14155550123`. Use encrypted/sensitive variables for secrets.
-2. Connect a Vercel Global Config store as `GLOBAL_CONFIG` and set the `linqResponses` policy below. Redeploy with `npm run deploy`.
+2. Create the `linq-responses` Vercel flag and configure its targets and `FLAGS` SDK key as described below. Redeploy with `npm run deploy`.
 3. Public webhook access is enabled: Vercel SSO was disabled with explicit user approval. Webhook signature verification and HTTP session authentication remain enforced.
 4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format.
 5. Text that number from an allowlisted real phone. Only verified private inbound messages for the configured line from allowed sender numbers are admitted while responses are enabled. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
@@ -27,18 +27,9 @@ The Linq channel uses eve's session continuation and interruption behavior. HTTP
 
 ## Response allowlist
 
-Manage the response flag and allowed **sender** numbers in [Vercel Global Config](https://vercel.com/docs/global-config/global-config-sdk) (formerly Edge Config). Connect the store to the project and deploy once with its `GLOBAL_CONFIG` connection string. Add this item, replacing the example numbers with the people who should receive responses:
+Manage the allowlist in the project's [Vercel Flags dashboard](https://vercel.com/docs/flags/vercel-flags/dashboard). Create a **boolean** flag with key `linq-responses` and set its fallback outcome to `false`. Under **Targets**, assign the `true` option to each allowed **User ID**, using the sender's exact E.164 number, such as `+12025550101`. The application evaluates the flag with the verified sender as `user.id`.
 
-```json
-{
-  "linqResponses": {
-    "enabled": true,
-    "allowedNumbers": ["+12025550101", "+12025550102"]
-  }
-}
-```
-
-Subsequent edits take effect for new incoming messages once Vercel propagates the config, without redeploying. Set `enabled` to `false` to stop admitting messages from everyone. An empty list, missing configuration, malformed values, or config read errors also block responses. Numbers must be exact E.164 strings, including `+` and country code; email handles, wildcards, and formatted local numbers are not allowed.
+Vercel provisions a `FLAGS` SDK key for each environment when the first flag is created. Deploy once with that variable. Subsequent target changes apply to new incoming messages after propagation without redeploying. Pause the flag to stop admitting messages from everyone. Empty targets, missing configuration, invalid flag values, and config read failures also block responses. Only explicit `true` targets grant access; rules, rollouts, and a `true` fallback cannot expand the allowlist. Email handles, wildcards, and formatted local numbers are not allowed.
 
 Blocked messages receive an HTTP 200 acknowledgement and are ignored before owner storage, read receipts, or agent dispatch. Invalid signatures still receive 401. The policy is checked for every message, including existing conversations. A flag change does not cancel turns already admitted. See [setup and verification](docs/linq.md#response-flag-and-sender-allowlist).
 
