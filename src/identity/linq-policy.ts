@@ -75,6 +75,8 @@ export function assessPrivateLinqIdentity(message: LinqMessage, isDM: boolean, l
   return {
     accepted: true as const,
     identity: {
+      // Used only for admission; keep phone numbers out of persisted auth.
+      senderHandle,
       chatKey: identityDigest([issuer, chat.id]),
       auth: {
         authenticator: "linq-private",
