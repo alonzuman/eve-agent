@@ -16,14 +16,22 @@ A general-purpose eve agent on Vercel, connected to an existing Linq iMessage nu
 First confirm that the existing number's webhook can be routed here. No existing Linq configuration has been changed.
 
 1. Enter `LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, and `LINQ_PHONE_NUMBER` in the project's [Vercel environment settings](https://vercel.com/undefined-software/eve-personal-agent/settings/environment-variables). The phone number must be its full E.164 form, such as `+14155550123`. Use encrypted/sensitive variables for secrets.
-2. Redeploy with `npm run deploy`.
+2. Create the `linq-responses` Vercel flag and configure its targets and `FLAGS` SDK key as described below. Redeploy with `npm run deploy`.
 3. Public webhook access is enabled: Vercel SSO was disabled with explicit user approval. Webhook signature verification and HTTP session authentication remain enforced.
 4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format.
-5. Text that number from a real phone. Only verified private inbound messages for the configured line are admitted. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
+5. Text that number from an allowlisted real phone. Only verified private inbound messages for the configured line from allowed sender numbers are admitted while responses are enabled. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
 
 You can also enter each variable interactively with `vercel env add NAME production`, keeping its value out of shell history. Pull development values with `vercel env pull .env.local --yes`. Do not commit environment files or paste credentials into conversation history.
 
 The Linq channel uses eve's session continuation and interruption behavior. HTTP session APIs are service-only; they are not a public alternative login surface. The health endpoint is `/eve/v1/health`.
+
+## Response allowlist
+
+Manage the allowlist in the project's [Vercel Flags dashboard](https://vercel.com/docs/flags/vercel-flags/dashboard). Create a **boolean** flag with key `linq-responses` and set its fallback outcome to `false`. Under **Targets**, assign the `true` option to each allowed **User ID**, using the sender's exact E.164 number, such as `+12025550101`. The application evaluates the flag with the verified sender as `user.id`.
+
+Vercel provisions a `FLAGS` SDK key for each environment when the first flag is created. Deploy once with that variable. Subsequent target changes apply to new incoming messages after propagation without redeploying. Pause the flag to stop admitting messages from everyone. Empty targets, missing configuration, invalid flag values, and config read failures also block responses. Only explicit `true` targets grant access; rules, rollouts, and a `true` fallback cannot expand the allowlist. Email handles, wildcards, and formatted local numbers are not allowed.
+
+Blocked messages receive an HTTP 200 acknowledgement and are ignored before owner storage, read receipts, or agent dispatch. Invalid signatures still receive 401. The policy is checked for every message, including existing conversations. A flag change does not cancel turns already admitted. See [setup and verification](docs/linq.md#response-flag-and-sender-allowlist).
 
 ## Browser
 
@@ -51,7 +59,7 @@ The built-in shell is explicitly configured to use Vercel Sandbox, including in 
 - Ask the agent to remember a harmless unique fact, then verify it in a later conversation.
 - Use two sender accounts and confirm that memory, sessions, and browser cookies are separate.
 - Try a general task such as finding information on a website using the browser.
-- Verify a group message and an invalid webhook signature do not start a conversation.
+- Verify a non-allowlisted sender, a group message, and an invalid webhook signature do not start a conversation. Remove an allowed sender and confirm their next message is ignored; disable the response flag and confirm all new messages are ignored.
 
 eve's current Linq adapter deduplicates incoming webhook messages in process. Cross-instance retries can still cause duplicate conversational turns. There is no claim of exactly-once message processing, and payments must not be enabled until separate atomic purchase records and recovery rules are implemented.
 
