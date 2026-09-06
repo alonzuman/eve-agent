@@ -17,3 +17,5 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - name: Initialize the bundled card font engine
+        run: node --input-type=module -e "await (await import('./.output/server/node_modules/harfbuzzjs/index.js')).default"

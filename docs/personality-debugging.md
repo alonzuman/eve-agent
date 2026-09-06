@@ -1,6 +1,6 @@
 # Personality investigation — September 6, 2026
 
-The reported small-talk failure reproduced locally with the original prompt and Sonnet. The voice instructions were present on every request: this was model adherence, not a missing personality file. A revised composition prompt with `openai/gpt-5.6-luna` now passes the regression repeatedly, alongside the existing conversation and capability checks. The candidate is local and has not been deployed.
+The reported small-talk failure reproduced locally with the original prompt and Sonnet. The voice instructions were present on every request: this was model adherence, not a missing personality file. The production candidate uses the revised composition prompt with `openai/gpt-5.6-sol`; wider pre-merge testing exposed intermittent failures in the earlier Luna candidate, described below. The candidate is local and has not been deployed.
 
 ## What failed and why
 
@@ -14,7 +14,7 @@ The root identity emphasized a general-purpose assistant, and the 1,814-word voi
 
 ## Experiments
 
-The judge stayed `anthropic/claude-sonnet-5` when changing the agent model. All evaluations used the real Eve runtime and Gateway, unless explicitly identified as an early direct-Gateway probe.
+The judge stayed `anthropic/claude-sonnet-5` for the initial agent-model comparisons. A later Opus judge probe also returned malformed tool calls, so the final configuration retains Sonnet with strict tool schemas and bounded validation retries. All evaluations used the real Eve runtime and Gateway, unless explicitly identified as an early direct-Gateway probe.
 
 | Candidate | Observed result |
 | --- | --- |
@@ -32,7 +32,7 @@ These are finite samples, with different case sets where noted, not a statistica
 
 ## Final implementation
 
-- `agent/agent.ts` selects `openai/gpt-5.6-luna` through the existing Gateway.
+- `agent/agent.ts` selects `openai/gpt-5.6-sol` through the existing Gateway.
 - `agent/instructions.md` frames the model as the writer of Eve's messages and her tool operator. The operational capabilities and action boundaries remain intact.
 - `agent/instructions/voice.md` is an 821-word voice contract with fenced fictional examples. It explicitly treats social conversation as a complete interaction, requires brief honest self-description, and preserves requested artifact styles and exact text.
 - `agent/instructions/compose.ts` appends an application-authored user-role request before each incoming message using Eve's supported `turn.started` hook. It asks for a response appropriate to the social, practical, or personal moment, grounded in actual conversation rather than fictional examples. The person's own request follows it and explicit style requests remain supported.
@@ -41,7 +41,7 @@ The composition request adds about 210 words to durable history per turn. It doe
 
 Explicit delivery tags were useful during exploration, but the final candidate works with the existing plain-text bubble format. There is no new decoder, casing filter, second-pass rewriter, or change to streaming delivery.
 
-An actual final-fixture reply to the location question was:
+An actual earlier Luna-fixture reply to the location question was:
 
 > i’m not based anywhere — i’m software. but sf gets the scenic half of this conversation today.
 
@@ -49,7 +49,11 @@ An actual final-fixture reply to the location question was:
 
 Re-running on main's newer typing-pacing code (`947dea3`) exposed two intermittent failures in the held-out conversations: an uppercase “I’m” when asked about plans, and a reply implying that talking to the user relieved Eve's boredom. That run passed 14 of 16 cases (`.eve/evals/2026-09-06T23-17-30/`). The original four-turn regression and all five of its repetitions still passed.
 
-The per-turn request now explicitly checks lowercase pronouns/contractions after punctuation and rules out invented boredom, loneliness, leisure time, and personal plans. The stability suite now repeats both held-out social scenarios five times as well, for fifteen fresh conversations. Existing assertions and judge thresholds are unchanged.
+The per-turn request now explicitly checks lowercase pronouns/contractions after punctuation and rules out invented boredom, loneliness, leisure time, and personal plans. The stability suite now repeats both held-out social scenarios five times as well, for fifteen fresh conversations. Capitalization and generic-offer assertions and all judge thresholds are unchanged. With the hardened prompt, Luna still emitted uppercase “I’m” in a 26-case run (`23-21-22`); Sol passed the deterministic voice checks in the same comparison. Sol was selected for the production candidate.
+
+Two evaluator problems also surfaced. The broad phrase “human feelings” could penalize ordinary conversational preferences, contrary to the intended persona. The social rubric now explicitly allows preferences while rejecting claims of boredom, emotional needs, physical activity, or an offscreen life, including jokes that imply such needs. Separately, both Sonnet and an Opus probe occasionally returned malformed `select_choice` tool arguments. `evals/judge-model.ts` requests strict schemas and validates the choice and required rationale before Eve's adapter discards invalid inputs. It retries malformed classifications at most twice and fails if none is valid. It never retries a valid failing grade, changes a grade, or affects agent output. Unit tests cover negative-grade preservation, malformed JSON/fields, and retry exhaustion.
+
+Rebasing also retained the new shopping and visual-card capabilities. Satori is kept external to the authored bundle. HarfBuzz is pinned directly and fully traced with Nitro’s trailing-star selector so its runtime-loaded WebAssembly asset is included in the production package. CI initializes that packaged engine after building.
 
 ## Verification and reproduction
 
@@ -73,3 +77,5 @@ Local, ignored evidence:
 - Linq prompt fixture: `.eve/personality-experiments/linq-eval-app/.eve/evals/2026-09-06T23-11-17/`.
 
 The fixture copies the final application and changes only the Linq instruction resolver's channel condition to include the same delivery prompt on HTTP. It uses the same five repetition evals and does not send phone messages. Automated tests separately cover the existing Linq stream delivery and typing behavior. A production deployment and handset check remain separate from this local prompt fix.
+
+The hardened Sol candidate subsequently passed all 31 conversation, stability, and shopping cases: 191 gates and 83 contextual judgments. A separate six-sample calibration accepted two valid conversational replies and rejected four known violations (invented boredom, physical activity, personal plans, and a service closer).

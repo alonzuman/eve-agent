@@ -39,6 +39,7 @@
     "drizzle-orm": "0.45.2",
     "entities": "8.0.0",
     "eve": "0.52.2",
+    "harfbuzzjs": "0.10.0",
     "ipaddr.js": "^2.5.0",
     "pg": "8.23.0",
     "satori": "0.33.4",
