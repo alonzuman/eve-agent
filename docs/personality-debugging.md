@@ -37,13 +37,19 @@ These are finite samples, with different case sets where noted, not a statistica
 - `agent/instructions/voice.md` is an 821-word voice contract with fenced fictional examples. It explicitly treats social conversation as a complete interaction, requires brief honest self-description, and preserves requested artifact styles and exact text.
 - `agent/instructions/compose.ts` appends an application-authored user-role request before each incoming message using Eve's supported `turn.started` hook. It asks for a response appropriate to the social, practical, or personal moment, grounded in actual conversation rather than fictional examples. The person's own request follows it and explicit style requests remain supported.
 
-The composition request adds about 150 words to durable history per turn. It does not add a model call or an outbound message. Long-history behavior, compaction, and context growth have not been evaluated here.
+The composition request adds about 210 words to durable history per turn. It does not add a model call or an outbound message. Long-history behavior, compaction, and context growth have not been evaluated here.
 
 Explicit delivery tags were useful during exploration, but the final candidate works with the existing plain-text bubble format. There is no new decoder, casing filter, second-pass rewriter, or change to streaming delivery.
 
 An actual final-fixture reply to the location question was:
 
 > i’m not based anywhere — i’m software. but sf gets the scenic half of this conversation today.
+
+## Pre-merge hardening
+
+Re-running on main's newer typing-pacing code (`947dea3`) exposed two intermittent failures in the held-out conversations: an uppercase “I’m” when asked about plans, and a reply implying that talking to the user relieved Eve's boredom. That run passed 14 of 16 cases (`.eve/evals/2026-09-06T23-17-30/`). The original four-turn regression and all five of its repetitions still passed.
+
+The per-turn request now explicitly checks lowercase pronouns/contractions after punctuation and rules out invented boredom, loneliness, leisure time, and personal plans. The stability suite now repeats both held-out social scenarios five times as well, for fifteen fresh conversations. Existing assertions and judge thresholds are unchanged.
 
 ## Verification and reproduction
 
@@ -56,7 +62,7 @@ npm run eval:conversation
 npm run eval:voice-stability
 ```
 
-The combined conversation/stability run passed 16 cases, 85 deterministic gates, and 38 contextual judgments. This covers the original six cases, the four-turn transcript regression, two held-out social conversations, exact case-sensitive text and literal markup, actual sandbox SHA-256 computation, and five fresh repetitions. Another five repetitions passed without prompt changes. The Linq-prompt fixture then passed five more: 26 cases total, with 175 gates and 78 judgments passing. The final application typecheck, all 55 automated tests, and the application build pass.
+Before the pre-merge hardening above, the combined conversation/stability run passed 16 cases, 85 deterministic gates, and 38 contextual judgments. This covers the original six cases, the four-turn transcript regression, two held-out social conversations, exact case-sensitive text and literal markup, actual sandbox SHA-256 computation, and five fresh repetitions. Another five repetitions passed without prompt changes. The Linq-prompt fixture then passed five more: 26 cases total, with 175 gates and 78 judgments passing. That checkout passed typecheck, all 55 automated tests, and the application build. After rebasing onto the typing-pacing change, typecheck, all 60 automated tests, and the build pass.
 
 Local, ignored evidence:
 
