@@ -15,12 +15,12 @@ Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly
 - Deployed `/eve/v1/health` reports ready via authenticated Vercel CLI access. The application rejects session creation without application authentication even after the platform protection check is satisfied.
 - With explicit approval, Vercel SSO was disabled. Public health returns 200; unsigned webhooks and unauthenticated sessions return 401.
 - Real Linq webhooks reach the deployed endpoint. Initial messages were ignored because `LINQ_PHONE_NUMBER` was not valid E.164; the production setting was corrected to the receiving agent line.
+- Live iMessage send/receive succeeds after the configuration correction. Production logs show `inbound accepted` and successful Workflow requests; the user confirmed receiving the agent's reply.
 
 The first model invocation identified a top-level union schema incompatible with the selected provider. The browser tool now exposes a top-level object, and a regression test covers it.
 
 ## Pending by request
 
-- A complete live iMessage reply after correcting the receiving line configuration.
 - Two real phone senders exercising deployed memory and browser isolation together.
 - Link account connection, approval/cancellation workflows, durable purchase records, merchant checkout, and the live flower-order evaluation.
 

@@ -1,6 +1,6 @@
 # Eve personal assistant
 
-A general-purpose eve agent on Vercel, ready to connect to an existing Linq iMessage number. The current scope is conversation, private file memory, shell/file tools, and isolated Chromium browsing. Payments and the live flower purchase evaluation are deferred until the user connects Linq and Link.
+A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. Live send/receive is verified. The current scope is conversation, private file memory, shell/file tools, and isolated Chromium browsing. Link payments and the live flower purchase evaluation are deferred.
 
 ## Deployment
 
