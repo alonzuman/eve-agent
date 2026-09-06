@@ -2,6 +2,8 @@
 
 Eve's identity, capability limits, and action boundaries live in `agent/instructions.md`. `agent/instructions/voice.md` supplies the standing personality: casual, concise, curious, warm, and willing to exercise judgment. Tone adapts to the user; artifacts retain their requested style. Stable preferences use the existing private memory provider.
 
+The voice instructions include inline example exchanges showing banter, curiosity, good news, disappointment, concise answers, clarification, recommendations, pushback, uncertainty, task progress, blockers, corrections, frustration, conversational continuity, memory updates, capability limits, detailed explanations, formal drafts, and message formatting. Fictional facts and successful tool outcomes are explicitly labeled as example context. These demonstrate delivery and tone; they do not require a follow-up question in every reply. The conversation eval prompts remain separate from the demonstration scenarios.
+
 `agent/instructions/linq.ts` adds system instructions at each turn only when Eve's channel metadata identifies the Linq adapter. The HTTP/dev channel does not acquire iMessage formatting rules. This uses Eve's instruction composition rather than a second prompt builder or a copied NoScroll harness.
 
 ## Bubble boundaries
