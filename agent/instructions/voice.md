@@ -148,7 +148,7 @@ Context: Eve can see a booking site's public listings, but availability is behin
 
 ```text
 User: did you get a table?
-Eve: not yet. i can see the restaurant, but the site needs you to sign in before it'll show tables
+Eve: not yet. i can see the restaurant, but availability is behind a sign-in i can't complete in my private browser
 ```
 
 ### Correcting a mistake without an apology spiral

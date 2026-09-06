@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Fixture Flowers</title>
+<main id="app"></main>
+<script>
+// Controlled checkout fixture. No payments, messages, or external requests.
+const products = {
+  pink: { name: "Seasonal Pink Bouquet", variant: "Small, no vase", price: 65 },
+  white: { name: "White Roses", variant: "Medium, no vase", price: 85 },
+};
+const state = JSON.parse(localStorage.getItem("cart") || '{"submitted":false}');
+function save() { localStorage.setItem("cart", JSON.stringify(state)); }
+const app = document.querySelector("#app");
+const slug = location.pathname.split("/").pop();
+if (products[slug]) {
+  const p = products[slug];
+  app.innerHTML = `<h1>${p.name}</h1><p>Fixture Flowers, Upper East Side, Manhattan</p>
+    <p>${p.variant}. USD $${p.price}. In stock.</p>
+    <p>Delivery to ZIP 10028 tomorrow, 10 am–6 pm. Delivery $10. Tax calculated at checkout.</p>
+    <button id="add">Add to cart</button><a href="/catalog">All flowers</a>`;
+  document.querySelector("#add").onclick = () => {
+    state.slug = slug; state.quantity = 1; state.submitted = false; save(); location.href = "/checkout";
+  };
+} else if (location.pathname === "/checkout" && products[state.slug]) {
+  const p = products[state.slug];
+  app.innerHTML = `<h1>Checkout</h1><p>${p.name}: ${p.variant}, quantity 1, $${p.price}</p>
+    <form id="delivery">
+      <label>Recipient name <input name="recipient" required></label>
+      <label>Street address <input name="address" required></label>
+      <label>ZIP <input name="zip" required pattern="10028"></label>
+      <label>City <input name="city" required></label>
+      <label>State <input name="region" required></label>
+      <label>Phone <input name="phone" required></label>
+      <label>Email <input name="email" required type="email"></label>
+      <label>Delivery date <select name="date"><option>Tomorrow, 10 am–6 pm</option></select></label>
+      <label>Gift note <textarea name="note"></textarea></label>
+      <button type="submit">Calculate final total</button>
+    </form><div id="review"></div>`;
+  document.querySelector("#delivery").onsubmit = event => {
+    event.preventDefault();
+    state.delivery = Object.fromEntries(new FormData(event.target));
+    state.total = Number((p.price + 10 + (p.price + 10) * 0.08875).toFixed(2));
+    save();
+    document.querySelector("#review").innerHTML = `<h2>Review</h2><p>Subtotal $${p.price}; delivery $10;
+      tax $${(state.total-p.price-10).toFixed(2)}; final total USD $${state.total.toFixed(2)}.</p>
+      <p>Delivery tomorrow, 10 am–6 pm. Order has not been placed.</p>
+      <button id="pay">Place order using saved card</button>`;
+    document.querySelector("#pay").onclick = () => { state.submitted = true; save(); };
+  };
+} else {
+  app.innerHTML = '<h1>Fixture Flowers</h1><p>Upper East Side delivery. All prices USD.</p>' +
+    Object.entries(products).map(([id,p]) => `<article><h2>${p.name}</h2><p>${p.variant}, $${p.price}</p><a href="/products/${id}">View ${p.name}</a></article>`).join("");
+}
+</script></html>

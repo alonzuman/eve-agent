@@ -1,6 +1,6 @@
 # Eve personal assistant
 
-A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. The current scope is conversation, private file memory, shell/file tools, Kernel browsing, and browser screenshot attachments. Link payments and the live flower purchase evaluation are deferred.
+A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. The current scope is conversation, private file memory, shell/file tools, Exa search, Kernel browsing, browser screenshot attachments, and shopping through cart preparation. Payments and order placement remain disabled.
 
 ## Deployment
 
@@ -59,6 +59,14 @@ vercel env pull .env.local --yes
 The Developer plan has a $0 monthly base fee; browser usage is metered. Production, development, and preview branches use separate browser projects. The old Connect connector and `AGENT_BROWSER_SNAPSHOT_ID` are no longer used.
 
 To send a screenshot, the agent navigates a real Kernel browser, captures with `computer_action`, calls `send_browser_screenshot` with `action: "send"`, then checks `action: "status"`. The Linq channel retains the latest native PNG/JPEG capture in session state and uploads its bytes through Linq's attachment API. The destination comes from the originating private chat, never model input. Internal screenshots are not automatically sent. Sends use a stable per-session/per-capture idempotency key. A `sent` receipt means Linq accepted the message; arrival on the phone remains an end-to-end acceptance check.
+
+## Shopping and search
+
+The app-owned Exa Search API resource is connected to the Vercel project. Pull its server-only `EXA_API_KEY` with `vercel env pull .env.local --yes`. The `search_web` tool requires the same verified private Linq identity as browsing. It returns bounded titles, public URLs and excerpts; live merchant prices, inventory and delivery still require browser verification.
+
+Eve loads the shopping skill to gather missing constraints, present two or three specific products with clickable links, preserve the user's choice, and prepare non-payment checkout fields. It reports the final total when available and stops before placing an order or using any payment method. Browser sessions and carts belong to Eve's remote computer and are not accessible from the user's phone.
+
+The app overrides Kernel's bundled browse skill under `agent/extensions/kernel/skills/browse/SKILL.md` to remove upstream live-view and takeover instructions. See [shopping verification](docs/shopping.md) for acceptance checks and test limitations.
 
 ## Development and checks
 

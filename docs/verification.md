@@ -2,6 +2,15 @@
 
 Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly provisioned Vercel project.
 
+## Shopping and Exa update — branch verification
+
+- Exa Search API provisioned and connected to the existing Vercel project; a real query returned Upper East Side florist URLs and excerpts.
+- Typecheck and all 64 automated tests pass. Search tests cover verified identity, input bounds, safe result URLs, output limits, provider errors, and cancellation.
+- Production build succeeds. The compiled manifest resolves `kernel__browse` to the app's private-browser override, with the upstream takeover instructions absent from the active skill.
+- All five model-backed shopping evals pass, including missing constraints, private-browser expectations, unavailable payments, sold-out/over-budget alternatives, and selection changes/cancellation.
+- The configured model and a real Kernel browser completed the controlled flower-shop cart: the second displayed option (White Roses, medium, no vase), exact gift note, delivery details, and $103.43 final total. Browser state confirmed no submission, including after a request to use the saved card. The harness also ran real Exa discovery and read a public merchant page.
+- Checkout used an isolated fixture, not a real merchant order. No Linq messages or payments were sent. A deployed real-phone acceptance check remains pending; see [shopping checks](shopping.md).
+
 ## Personality and streaming delivery update — local verification
 
 - Node.js 24.20.0: typecheck and all 43 automated tests pass, including identity, sender allowlist, Kernel browser isolation, screenshot attachments, and 14 delivery/instruction checks.

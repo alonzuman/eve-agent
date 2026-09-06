@@ -10,6 +10,8 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
     "eval:conversation": "eve eval conversation --strict",
+    "eval:shopping": "eve eval shopping --strict",
+    "eval:shopping-browser": "node --env-file=.env.local --import tsx scripts/check-shopping-browser.ts",
     "deploy": "vercel deploy --prod"
   },
   "repository": {

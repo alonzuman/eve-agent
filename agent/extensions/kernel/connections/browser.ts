@@ -4,7 +4,7 @@ import { requireUserScope } from "../../../../src/identity/user-scope.js";
 
 export default defineMcpClientConnection({
   url: "https://mcp.onkernel.com/mcp",
-  description: "Kernel browser, already connected by the app. Create browser sessions, navigate with Playwright, and use computer controls to take screenshots. Browser resources are private to the current user.",
+  description: "Your private remote browser, already connected by the app and isolated for the current user. The user cannot see or operate it. Navigate with Playwright, inspect pages, and use computer controls for screenshots. Share public product/page URLs in chat; these do not share browser sessions or carts. Never send live-view URLs or ask the user to take over.",
   auth: (ctx) => {
     requireUserScope(ctx);
     return {
