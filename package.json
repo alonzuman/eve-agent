@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
+    "eval:conversation": "eve eval conversation --strict",
     "deploy": "vercel deploy --prod",
     "browser:snapshot": "node --env-file=.env.local --import tsx scripts/create-browser-snapshot.ts"
   },

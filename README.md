@@ -25,6 +25,8 @@ You can also enter each variable interactively with `vercel env add NAME product
 
 The Linq channel uses eve's session continuation and interruption behavior. HTTP session APIs are service-only; they are not a public alternative login surface. The health endpoint is `/eve/v1/health`.
 
+Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
+
 ## Browser
 
 A reusable Chromium image has already been provisioned and its `AGENT_BROWSER_SNAPSHOT_ID` configured in Vercel. To rebuild it, run `npm run browser:snapshot` after pulling local project credentials. It installs pinned Playwright/Chromium in an empty Vercel Sandbox, verifies the browser can load a page, and prints the new snapshot ID. Update the deployment environment and redeploy. The reusable image never contains a user's cookies.

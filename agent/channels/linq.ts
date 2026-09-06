@@ -1,6 +1,7 @@
 import { linqChannel } from "eve/channels/linq";
 import { bindPrivateChat } from "../../src/identity/chat-owner.js";
 import { assessPrivateLinqIdentity } from "../../src/identity/linq-policy.js";
+import { linqDeliveryEvents } from "../../src/messaging/linq-delivery.js";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -16,6 +17,7 @@ export default linqChannel({
     signingSecret: () => requiredEnv("LINQ_WEBHOOK_SECRET"),
   },
   turnPolicy: "steer",
+  events: linqDeliveryEvents,
   async onMessage({ thread }, message) {
     const assessment = assessPrivateLinqIdentity(message, thread.isDM, requiredEnv("LINQ_PHONE_NUMBER"));
     if (!assessment.accepted) {
