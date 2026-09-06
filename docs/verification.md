@@ -2,6 +2,15 @@
 
 Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly provisioned Vercel project.
 
+## Personality regression fix — local verification
+
+- Node.js 24.20.0: typecheck, all 55 automated tests, and the final application build pass.
+- Outgoing Gateway requests in a baseline reproduction contain the standing voice rules on every turn. The original six evals passed while the reported small-talk conversation failed repeatedly. Changing only the model to Luna still failed four of five fresh sessions.
+- The revised writer framing, compact voice examples, per-turn composition request, and `openai/gpt-5.6-luna` passed all 16 cases in `.eve/evals/2026-09-06T23-09-28/`: eleven conversation cases plus five fresh small-talk repetitions, with 85 deterministic gates and 38 contextual judgments passing. The independent judge remains `anthropic/claude-sonnet-5`.
+- Five more unchanged HTTP repetitions and five with the Linq delivery prompt enabled in a local fixture also passed: 26 cases total, 175 deterministic gates, and 78 contextual judgments. The fixture changes only the delivery-instruction channel condition; it does not exercise phone transport.
+- Coverage includes formal tone, exact case-sensitive text and literal markup, held-out social conversation, and actual `bash` execution in Vercel Sandbox with a verified SHA-256 result. Tests do not send real iMessages or deploy the candidate.
+- See [the investigation](personality-debugging.md) for comparisons and limitations. Earlier sections below describe their respective changes at the time they were tested.
+
 ## Shopping and Exa update — branch verification
 
 - Exa Search API provisioned and connected to the existing Vercel project; a real query returned Upper East Side florist URLs and excerpts.

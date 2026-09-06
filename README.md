@@ -7,7 +7,7 @@ A general-purpose eve agent on Vercel, connected to an existing Linq iMessage nu
 - Vercel project: [eve-personal-agent](https://vercel.com/undefined-software/eve-personal-agent)
 - Deployment: [eve-personal-agent-rouge.vercel.app](https://eve-personal-agent-rouge.vercel.app/eve/v1/health).
 - Framework: eve `0.52.2`, pinned with its required AI SDK `7.0.93` peer dependency.
-- Model: `anthropic/claude-sonnet-5` through Vercel AI Gateway, using project OIDC.
+- Model: `openai/gpt-5.6-luna` through Vercel AI Gateway, using project OIDC. Conversation evals retain an independent `anthropic/claude-sonnet-5` judge.
 - Runtime: Node.js 24, eve's Vercel Workflow integration, and Vercel Sandbox.
 - Memory: eve's built-in `fileMemory()` scoped by authenticated principal, backed by the connected **private** Blob store. Built-in compaction is unchanged.
 - Messages: Neon Postgres through Drizzle stores Linq message IDs, addressable parts, reply relationships, and reaction/reply action receipts. See [database setup and migrations](docs/database.md).
