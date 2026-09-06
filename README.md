@@ -27,16 +27,18 @@ The Linq channel uses eve's session continuation and interruption behavior. HTTP
 
 ## Browser
 
-The official `@onkernel/eve-extension` is mounted at `agent/extensions/kernel.ts`. Its hosted MCP connection supplies browser lifecycle, Playwright, computer controls, profiles, and managed-auth tools. Eve's shell continues using Vercel Sandbox; the custom Chromium sandbox and image-building scripts have been removed.
+The official `@onkernel/eve-extension` is mounted at `agent/extensions/kernel/extension.ts`. Its hosted MCP connection supplies browser lifecycle, Playwright, computer controls and profiles. Eve's shell continues using Vercel Sandbox; the custom Chromium sandbox and image-building scripts have been removed.
 
-Kernel authenticates through the attached Vercel Connect connector `kernel/eve-kernel`. Each sender follows the authorization link on first use; grants are associated with their verified Linq identity. No shared `KERNEL_API_KEY` is configured. Kernel permissions are those of the account the sender authorizes; sharing a Kernel account also shares that account's browser resources. Use separate Kernel projects/accounts for environment or account isolation. The obsolete `AGENT_BROWSER_SNAPSHOT_ID` environment variable is no longer read.
+Kernel uses the app-owned `KERNEL_API_KEY` supplied by its Vercel Marketplace resource. Users never authorize Kernel or see a Kernel sign-in link. The connection override selects a separate Kernel project for each verified Linq user and environment. Both MCP project selectors are supplied by the server and removed from model control. Project administration and credential-management tools are not exposed. Missing credentials or unavailable project isolation fail closed.
 
-For another deployment, create and attach its connector from the project directory, then update the mount with the returned UID:
+Provision and connect the Developer resource from this project directory after the owner accepts Marketplace terms:
 
 ```sh
-vercel connect create kernel --name eve-kernel --connection-method mcp --yes
-vercel connect attach kernel/eve-kernel --yes
+vercel integration add kernel --plan FREE --name eve-browser --no-claim
+vercel env pull .env.local --yes
 ```
+
+The Developer plan has a $0 monthly base fee; browser usage is metered. Production, development, and preview branches use separate browser projects. The old Connect connector and `AGENT_BROWSER_SNAPSHOT_ID` are no longer used.
 
 To send a screenshot, the agent navigates a real Kernel browser, captures with `computer_action`, calls `send_browser_screenshot` with `action: "send"`, then checks `action: "status"`. The Linq channel retains the latest native PNG/JPEG capture in session state and uploads its bytes through Linq's attachment API. The destination comes from the originating private chat, never model input. Internal screenshots are not automatically sent. Sends use a stable per-session/per-capture idempotency key. A `sent` receipt means Linq accepted the message; arrival on the phone remains an end-to-end acceptance check.
 
@@ -56,7 +58,7 @@ The built-in shell is explicitly configured to use Vercel Sandbox, including in 
 
 - Send and receive a real iMessage.
 - Ask the agent to remember a harmless unique fact, then verify it in a later conversation.
-- Use two sender accounts and confirm memory/session isolation and separate Kernel authorization grants.
+- Use two sender accounts and confirm memory/session isolation and separate Kernel projects.
 - Try a general task such as finding information on a website using the browser.
 - Text “Send me a screenshot of the example.com home page,” complete Kernel authorization if prompted, and verify an image attachment arrives in that same chat. Inspect Agent Runs for browser creation, navigation, screenshot capture, and the Linq message receipt. This live check must pass before declaring the screenshot flow verified.
 - Verify a group message and an invalid webhook signature do not start a conversation.
