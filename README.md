@@ -68,6 +68,10 @@ Eve loads the shopping skill to gather missing constraints, present two or three
 
 The app overrides Kernel's bundled browse skill under `agent/extensions/kernel/skills/browse/SKILL.md` to remove upstream live-view and takeover instructions. See [shopping verification](docs/shopping.md) for acceptance checks and test limitations.
 
+## Visual replies
+
+The agent can compose one to five image cards using `present_cards`, with HTML templates and string props. The generic `renderCard({ html, props })` API uses Satori and resvg to produce PNG attachments. Cards can show researched photos, prices, comparisons, plans, or other visual summaries. A batch is sent in one Linq message; iMessage chooses its native collage or stack layout. Numbered labels and source links are retained for replies such as “option 2.” See [rendering, templates, and delivery](docs/visual-cards.md). Live phone rendering still needs an acceptance check after deployment.
+
 ## Development and checks
 
 ```sh
