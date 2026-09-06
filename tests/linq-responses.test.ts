@@ -6,6 +6,7 @@ import channel from "../agent/channels/linq.js";
 import { assessLinqResponseAccess } from "../src/identity/linq-allowlist.js";
 import { admitLinqMessage } from "../src/identity/linq-admission.js";
 import { privateLinqIdentity } from "../src/identity/linq-policy.js";
+import { messageStore } from "../src/messaging/message-store.js";
 
 const line = "+12025550100", alice = "+12025550101", bob = "+12025550102";
 
@@ -105,6 +106,12 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
     });
   }
   let allowSideEffects = false;
+  let storageUnavailable = false;
+  const recorded = t.mock.method(messageStore, "record", async (...[_scope, messages]: Parameters<typeof messageStore.record>) => {
+    assert.equal(allowSideEffects, true, "blocked messages must not reach PG");
+    if (storageUnavailable) throw new Error("Message storage is temporarily unavailable.");
+    return messages.map((message, index) => ({ ...message, ref: `m${index + 1}` }));
+  });
   const identity = privateLinqIdentity(message(bob), true, line)!;
   const outbound: string[] = [];
   // Blob uses undici directly. Intercept it too, and disallow all real network I/O.
@@ -116,6 +123,15 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
   t.mock.method(globalThis, "fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (allowSideEffects && url.hostname === "api.linqapp.com") {
+      if (storageUnavailable) {
+        assert.equal(url.pathname, "/api/partner/v3/chats/chat-a/messages");
+        assert.equal(init?.method, "POST");
+        assert.deepEqual(JSON.parse(init?.body as string).message.parts, [
+          { type: "text", value: "messaging is temporarily unavailable. please try again shortly." },
+        ]);
+        outbound.push("storage-failure-notice");
+        return Response.json({ message: { id: "failure-notice" }, chat_id: "chat-a" });
+      }
       assert.equal(url.pathname, "/api/partner/v3/chats/chat-a/read");
       assert.equal(init?.method, "POST");
       outbound.push("mark-read");
@@ -178,6 +194,7 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
   ]);
   assert.equal(outbound.length, 0);
   assert.equal(from.mock.callCount(), 0);
+  assert.equal(recorded.mock.callCount(), 0);
   assert.equal(neverDispatch.mock.callCount(), 0);
   assert.equal(errors.mock.calls.filter((call) => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
 
@@ -189,7 +206,7 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
     .reply(() => {
       outbound.push("owner-read");
       return { statusCode: 200, data: JSON.stringify({ userScope: identity.auth.principalId }) };
-    });
+    }).persist();
   network.get("https://teststore.private.blob.vercel-storage.com")
     .intercept({ path: `/app-private/linq/accounts/${identity.auth.principalId}.json?cache=0`, method: "GET" })
     .reply(() => {
@@ -197,12 +214,14 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
       return { statusCode: 200, data: JSON.stringify({
         version: 1, generation: null, chats: ["linq:chat-a"], resetIds: [], pendingReset: null,
       }), responseOptions: { headers: { etag: '"account-1"' } } };
-    });
+    }).persist();
   await send();
   assert.equal(errors.mock.calls.filter((call) => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
   assert.deepEqual(outbound, ["owner-read", "account-read", "mark-read"]);
   assert.equal(from.mock.callCount(), 1);
   assert.equal(deliver.mock.callCount(), 1);
+  assert.equal(recorded.mock.callCount(), 1);
+  assert.partialDeepStrictEqual(deliver.mock.calls[0].arguments[0], { context: ["Incoming iMessage references: m1 (part 0)."] });
   assert.partialDeepStrictEqual(deliver.mock.calls[0].arguments[1], { auth: identity.auth });
   process.env.LINQ_ALLOWED_NUMBERS = alice;
   allowSideEffects = false;
@@ -210,5 +229,14 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
   assert.deepEqual(outbound, ["owner-read", "account-read", "mark-read"]);
   assert.equal(from.mock.callCount(), 1);
   assert.equal(errors.mock.calls.filter((call) => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
+  process.env.LINQ_ALLOWED_NUMBERS = bob;
+  allowSideEffects = true;
+  storageUnavailable = true;
+  const warnings = t.mock.method(console, "warn", () => {});
+  await send();
+  assert.deepEqual(outbound.slice(-3), ["owner-read", "account-read", "storage-failure-notice"]);
+  assert.equal(from.mock.callCount(), 1, "PG failure must stop model dispatch");
+  assert.equal(deliver.mock.callCount(), 1);
+  assert.deepEqual(warnings.mock.calls.map(call => call.arguments), [["[linq] inbound message storage failed"]]);
   network.assertNoPendingInterceptors();
 });

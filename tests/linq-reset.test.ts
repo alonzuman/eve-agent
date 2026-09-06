@@ -110,6 +110,7 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
   const line = "+12025550100", alice = "+12025550101", bob = "+12025550102";
   const key = Buffer.from("test-signature-secret-32-bytes-123");
   const owners = new Map<string, string>();
+  const admittedPrincipals: string[] = [];
   const channel = resettableLinqChannel({
     credentials: { apiKey: "test-api-key", signingSecret: `whsec_${key.toString("base64")}` },
     onMessage: ({ thread }, message) => admitLinqMessage(message, thread.isDM, line, {
@@ -121,6 +122,10 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
         return true;
       },
     }),
+    async onAdmittedMessage(_ctx, _message, admission) {
+      admittedPrincipals.push(admission.auth!.principalId);
+      return admission;
+    },
   }, store);
   const replies: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -187,6 +192,7 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
   await send("another chat", alice, "chat-a2");
   await send("remember my favorite flower is a tulip", bob, "chat-b");
   assert.equal(delivered.length, 3);
+  assert.equal(admittedPrincipals.length, 3);
   const oldAlice = delivered[0]!, oldBob = delivered[2]!;
   const accountsBefore = structuredClone(accounts);
   await send("!reset", alice, "chat-a", { signed: false });
@@ -205,6 +211,8 @@ test("signed Linq reset bypasses model dispatch and the next message starts with
   assert.match(replies[0]!, /starting fresh/);
   await send("what do you know about me?");
   const freshAlice = delivered.at(-1)!;
+  assert.equal(admittedPrincipals.at(-1), freshAlice.options.auth.principalId,
+    "message persistence sees the new reset generation, not the original sender scope");
   assert.notEqual(freshAlice.address, oldAlice.address);
   assert.notEqual(freshAlice.options.auth.principalId, oldAlice.options.auth.principalId);
   assert.deepEqual(freshAlice.content, { message: "what do you know about me?", context: [] });

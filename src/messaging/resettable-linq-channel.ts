@@ -5,13 +5,19 @@ import { linqChannel, type LinqChannel, type LinqChannelConfig } from "eve/chann
 import { accountAddress, accountPrincipal, prepareLinqAccount, type LinqAccountStore } from "../identity/linq-account.js";
 import { requireUserScope } from "../identity/user-scope.js";
 
+type OnMessage = NonNullable<LinqChannelConfig["onMessage"]>;
+type Admission = NonNullable<Awaited<ReturnType<OnMessage>>>;
+
 export function isResetCommand(message: { readonly text: string; readonly attachments: readonly unknown[] }): boolean {
   return message.text.trim() === "!reset" && message.attachments.length === 0;
 }
 
 /** Add account controls without replacing Eve's signed Linq adapter or dispatch. */
 export function resettableLinqChannel(
-  config: LinqChannelConfig & { onMessage: NonNullable<LinqChannelConfig["onMessage"]> },
+  config: LinqChannelConfig & {
+    onMessage: OnMessage;
+    onAdmittedMessage?: (ctx: Parameters<OnMessage>[0], message: Parameters<OnMessage>[1], admission: Admission) => Promise<Admission | null>;
+  },
   store?: LinqAccountStore,
 ): LinqChannel {
   // Eve 0.52.2 exposes `from().reset()` on routes, but not Linq's onMessage ctx.
@@ -51,10 +57,11 @@ export function resettableLinqChannel(
       }
       request.addresses.set(ctx.thread.id, accountAddress(ctx.thread.id, generation));
       const scopedPrincipal = accountPrincipal(principalId, generation);
-      return {
+      const admission = {
         ...admitted,
         auth: { ...admitted.auth!, principalId: scopedPrincipal, subject: scopedPrincipal },
       };
+      return config.onAdmittedMessage ? config.onAdmittedMessage(ctx, message, admission) : admission;
     },
   });
   return {

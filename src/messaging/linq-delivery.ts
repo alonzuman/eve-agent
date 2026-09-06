@@ -6,6 +6,7 @@ type Events = NonNullable<LinqChannelConfig["events"]>;
 type Event<K extends keyof Events> = Parameters<NonNullable<Events[K]>>[0];
 type Turn = { turnId: string; sequence: number };
 type StopTyping = (threadId: string) => Promise<void>;
+type RecordSentMessage = (threadId: string, text: string, receipt: unknown) => void | Promise<void>;
 
 interface BubbleStream extends Turn {
   sentCount: number;
@@ -89,8 +90,11 @@ function typingDelayMs(text: string, random: number): number {
   return Math.round(Math.min(4_000, Math.max(400, estimate)));
 }
 
-async function send(channel: DeliveryChannel, stream: BubbleStream, text: string, timing: DeliveryTiming): Promise<void> {
+async function send(channel: DeliveryChannel, stream: BubbleStream, text: string, timing: DeliveryTiming, recordSent?: RecordSentMessage): Promise<void> {
   if (!text || stream.stopped || !channel.thread) return;
+  // Eve's built-in conditional-delivery marker can arrive in deltas before its
+  // null completion. Never send it, including when followed by a blank line.
+  if (text.includes("<eve-empty-delivery/>") || text.includes("&lt;eve-empty-delivery/&gt;")) return;
   try {
     if (stream.sentCount > 0) {
       await typing(channel);
@@ -99,8 +103,9 @@ async function send(channel: DeliveryChannel, stream: BubbleStream, text: string
       // Cancellation or a replacement turn can arrive while typing or waiting.
       if (stream.stopped || !channel.thread) return;
     }
-    await channel.thread.post(text);
+    const receipt = await channel.thread.post(text);
     stream.sentCount = (stream.sentCount ?? 0) + 1;
+    await recordSent?.(channel.thread.id, text, receipt);
   } catch (error) {
     // Don't send later bubbles or automatically retry an ambiguous provider send.
     stop(channel, stream);
@@ -108,7 +113,7 @@ async function send(channel: DeliveryChannel, stream: BubbleStream, text: string
   }
 }
 
-async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: DeliveryTiming): Promise<boolean> {
+async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: DeliveryTiming, recordSent?: RecordSentMessage): Promise<boolean> {
   let sent = false;
   // Keep the unconsumed suffix, including a delimiter split across delta chunks.
   // A single LF/CRLF inside a bubble is preserved verbatim.
@@ -116,7 +121,7 @@ async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: Del
     const text = stream.pending.slice(0, boundary.index).trim();
     stream.pending = stream.pending.slice(boundary.index + boundary[0].length);
     if (text) {
-      await send(channel, stream, text, timing);
+      await send(channel, stream, text, timing, recordSent);
       sent = true;
     }
   }
@@ -153,8 +158,9 @@ async function failure(channel: DeliveryChannel, stopTyping: StopTyping): Promis
 }
 
 // Eve serializes stream event handling. Await each pause and post to retain order;
-// no detached queue, provider client, custom send tool, or post-and-edit streaming.
-export function createLinqDeliveryEvents(stopTyping: StopTyping, overrides: Partial<DeliveryTiming> = {}) {
+// no detached queue or post-and-edit streaming.
+export function createLinqDeliveryEvents(stopTyping: StopTyping, options: Partial<DeliveryTiming> & { recordSent?: RecordSentMessage } = {}) {
+  const { recordSent, ...overrides } = options;
   const timing: DeliveryTiming = {
     random: () => Math.random(),
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -178,7 +184,7 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping, overrides: Part
       }
       stream.receivedDeltas = true;
       stream.pending += event.messageDelta;
-      if (await drain(channel, stream, timing) && !stream.stopped) await typing(channel);
+      if (await drain(channel, stream, timing, recordSent) && !stream.stopped) await typing(channel);
     },
     async "message.completed"(event: Event<"message.completed">, channel: DeliveryChannel) {
       const stream = forMessage(channel, event);
@@ -194,10 +200,10 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping, overrides: Part
       // A completion repeats the full message; only flush the unsent suffix.
       // Also support a complete message from a provider that emitted no deltas.
       if (!stream.receivedDeltas) stream.pending = event.message;
-      await drain(channel, stream, timing);
+      await drain(channel, stream, timing, recordSent);
       const tail = stream.pending.trim();
       stream.pending = "";
-      await send(channel, stream, tail, timing);
+      await send(channel, stream, tail, timing, recordSent);
     },
     async "turn.cancelled"(event: Event<"turn.cancelled">, channel: DeliveryChannel) {
       const stream = forTurn(channel, event);

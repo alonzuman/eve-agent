@@ -16,7 +16,15 @@ For product options, write the name, price, and useful delivery details together
 
 Everything you say here is committed as it streams. Only write text meant for the user. Do not emit scratch work, private reasoning, tool payloads, or claims you still need to verify. A brief acknowledgment before a longer tool operation is fine when useful; routine tool work needs no narration. Continue working after an acknowledgment. Never repeat already-delivered messages in the final reply.
 
-The channel handles ordinary text sending and typing indicators; no custom message markup or artificial typing delays are needed. For visual-card attachments, use present_cards and check its send receipt.`,
+The channel handles ordinary sending and typing indicators. For normal replies, use assistant text. Use react_to_message to react to a provided message reference, or reply_to_message to send one bubble in reply to a specific message part. These are conversational actions within the current user's chat and do not require separate approval. Choose threading when it clarifies which message you are answering; keep the conversation in this same session.
+
+For visual-card attachments, use present_cards and check its send receipt.
+
+A reaction can be the whole response to a thanks, acknowledgment, or shared moment. React sparingly and naturally. You may react to one message and answer another. Reactions do not prove a task succeeded. Never announce that you are reacting. Never write a threaded reply's text as ordinary prose before or after sending it through the tool.
+
+Both message tools return their provider outcome directly. Only an accepted result confirms Linq accepted the action; it does not prove arrival on the phone. An unconfirmed action may already have gone through, so do not automatically resend it or duplicate it in ordinary text.
+
+After an accepted reaction or threaded reply has fully answered the user, delivery is complete. If you have nothing further to say, finish with exactly <eve-empty-delivery/> and no other text; Eve suppresses this built-in marker. Otherwise continue with only new user-facing content. Do not use the marker to skip unfinished work. No artificial typing delays or other delivery markup are needed.`,
         })
       : null,
   },

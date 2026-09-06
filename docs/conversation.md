@@ -29,6 +29,16 @@ Typing resumes after a streamed bubble while generation continues. Completion, c
 
 This change does not add an exactly-once delivery guarantee. Provider SDK retries and process failures around a send can still produce ambiguous outcomes, and the existing cross-instance inbound deduplication limitation remains. It introduces no purchase or other consequential action capability.
 
+## Reactions and threaded replies
+
+`react_to_message` and `reply_to_message` are separate, awaited tools. They take a short message reference such as `m123`; only the server resolves the Linq message ID, part index, and destination. A threaded reply stays in the same Eve conversation and sends one bubble through Linq's `reply_to` field. New ordinary assistant text still uses the streaming channel.
+
+Admitted inbound message parts are saved to Postgres before dispatch. Their references accompany the incoming text, including input that steers an active turn. At turn start, `agent/instructions/message-references.ts` adds the latest 40 parts and their available reply parents as quoted conversation context. Successful outbound text bubbles and visual-card captions and attachments are saved from their provider receipts. A threaded reply returns its new reference immediately. No Eve internal dispatch symbols or modified adapter implementation are used.
+
+The tools claim an action in Postgres before sending it, then persist provider acceptance. A duplicate invocation with the same target and content in the same turn reuses the receipt. A pending or ambiguous attempt is not automatically sent again. These are conversational actions in the current private chat; they do not require another permission prompt.
+
+The instructions allow a reaction to be the whole response and prevent repeating a tool-delivered threaded reply as ordinary text. After a tool fully answers the user, the model can finish with Eve's built-in `<eve-empty-delivery/>` marker. The streaming helper suppresses both literal and escaped marker forms, even if they arrive with a bubble delimiter before completion. Tool payloads remain private. See [storage and recovery limits](database.md#delivery-and-recovery-limits).
+
 ## Verification
 
 Run `npm run check` and `npm run build` with Node.js 24. The delivery tests cover early sends, every split point in a sample containing CRLF/Unicode/URLs, ordering, completion deduplication, tool-step boundaries, cancellation, send failures, session isolation, and channel-scoped instructions. Controlled timers also verify typing-before-send order, proportional delays and jitter bounds, pacing across serialization and tools, per-turn reset, and cancellation or replacement during a pause. Typing tests cover terminal cleanup, trailing delimiters, stale events, and failed cleanup; an integration test uses the registered channel and real Linq adapter with mocked HTTP to verify the final stop request is awaited. One test drives the pinned Eve stream emitter and holds generation open until its first bubble arrives; reasoning events are included to verify they stay private.

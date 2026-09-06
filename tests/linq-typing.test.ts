@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import channel from "../agent/channels/linq.js";
 import { stopLinqTyping } from "../src/messaging/linq-typing.js";
+import { messageStore } from "../src/messaging/message-store.js";
 // Test the registered channel with its real pinned Linq adapter and fake HTTP.
 import { ContextContainer, contextStorage } from "../node_modules/eve/dist/src/context/container.js";
 import { SessionKey } from "../node_modules/eve/dist/src/context/keys.js";
 
 test("the registered Linq channel awaits DELETE typing after the final streamed bubble", async t => {
+  const recorded = t.mock.method(messageStore, "record", async (...[_scope, input]: Parameters<typeof messageStore.record>) => input.map(message => ({ ...message, ref: "m1" })));
   const previousKey = process.env.LINQ_API_KEY;
   const previousSecret = process.env.LINQ_WEBHOOK_SECRET;
   process.env.LINQ_API_KEY = "test-api-key";
@@ -56,7 +58,8 @@ test("the registered Linq channel awaits DELETE typing after the final streamed 
   } } });
   assert.ok(channelContext.thread, "use Eve's restored thread, not a thread stub");
   const context = new ContextContainer();
-  context.set(SessionKey, { sessionId: "session-a", auth: { current: null, initiator: null }, turn: { id: "turn-1", sequence: 1 } });
+  const identity = { authenticator: "linq-private", issuer: "linq:test", principalType: "user", principalId: "a".repeat(64), attributes: {} };
+  context.set(SessionKey, { sessionId: "session-a", auth: { current: identity, initiator: identity }, turn: { id: "turn-1", sequence: 1 } });
   const coordinates = { turnId: "turn-1", sequence: 1, stepIndex: 0 };
   await contextStorage.run(context, async () => {
     await adapter["turn.started"](coordinates, channelContext);
@@ -77,6 +80,8 @@ test("the registered Linq channel awaits DELETE typing after the final streamed 
     "POST /api/partner/v3/chats/chat-a/typing",
     "DELETE /api/partner/v3/chats/chat-a/typing",
   ]);
+  assert.equal(recorded.mock.callCount(), 1);
+  assert.equal(recorded.mock.calls[0].arguments[1][0]?.messageId, "message-1");
 });
 
 test("typing cleanup uses private chat IDs, bounded requests, and no redirect or retry", async () => {
