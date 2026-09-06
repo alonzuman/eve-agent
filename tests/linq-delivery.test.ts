@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TextStreamPart, ToolSet } from "ai";
-import { linqDeliveryEvents as events } from "../src/messaging/linq-delivery.js";
+import { createLinqDeliveryEvents, linqDeliveryEvents } from "../src/messaging/linq-delivery.js";
 import linqInstructions from "../agent/instructions/linq.js";
 // Exercise the pinned Eve emitter as well as our handlers. No model or Linq calls.
 import { emitStreamContent } from "../node_modules/eve/dist/src/harness/emission.js";
 
-type Channel = Parameters<typeof events["message.appended"]>[1];
+type Channel = Parameters<typeof linqDeliveryEvents["message.appended"]>[1];
 const turn = { turnId: "turn_0", sequence: 0 };
 const coordinates = { ...turn, stepIndex: 0 };
 const delta = (messageDelta: string, stepIndex = 0) => ({ ...coordinates, stepIndex, messageDelta });
@@ -14,21 +14,29 @@ const complete = (message: string | null, stepIndex = 0, finishReason: "stop" | 
   ...coordinates, stepIndex, message, finishReason,
 });
 
-function fixture(post?: (text: string) => Promise<void>) {
+function fixture(post?: (text: string) => Promise<void>, stopTyping?: () => Promise<void>) {
   const sent: string[] = [];
-  let typingCount = 0;
+  let typingCount = 0, typingStops = 0;
+  let isTyping = false;
   const channel: Channel = {
     state: {},
     thread: {
-      async post(text) { sent.push(text); await post?.(text); },
-      async startTyping() { typingCount++; },
+      id: "linq:test-chat",
+      async post(text) { sent.push(text); await post?.(text); isTyping = false; },
+      async startTyping() { typingCount++; isTyping = true; },
     },
   };
-  return { channel, sent, typingCount: () => typingCount };
+  const events = createLinqDeliveryEvents(async threadId => {
+    assert.equal(threadId, channel.thread?.id);
+    await stopTyping?.();
+    typingStops++;
+    isTyping = false;
+  });
+  return { events, channel, sent, typingCount: () => typingCount, typingStops: () => typingStops, isTyping: () => isTyping };
 }
 
 test("sends each delimited bubble before completion and flushes the final tail only once", async () => {
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   await events["turn.started"](turn, channel);
   await events["message.appended"](delta("found three places\n"), channel);
   assert.deepEqual(sent, []);
@@ -39,7 +47,7 @@ test("sends each delimited bubble before completion and flushes the final tail o
   const done = complete("found three places\n\ni'd pick hillside\n\nhttps://example.com/?a=1&b=two#details");
   await events["message.completed"](done, channel);
   await events["message.completed"](done, channel);
-  events["turn.completed"](turn, channel);
+  await events["turn.completed"](turn, channel);
   assert.deepEqual(sent, ["found three places", "i'd pick hillside", "https://example.com/?a=1&b=two#details"]);
 });
 
@@ -47,13 +55,13 @@ test("all chunk boundaries preserve single newlines, CRLF, Unicode, and intact U
   const text = "  first\nsecond\r\n\t\r\n\n\n café 🙌\n\nhttps://example.com/a_b?q=x%20y&n=1#part\n\nlast  ";
   const expected = ["first\nsecond", "café 🙌", "https://example.com/a_b?q=x%20y&n=1#part", "last"];
   for (let cut = 0; cut <= text.length; cut++) {
-    const { channel, sent } = fixture();
+    const { events, channel, sent } = fixture();
     await events["message.appended"](delta(text.slice(0, cut)), channel);
     await events["message.appended"](delta(text.slice(cut)), channel);
     await events["message.completed"](complete(text), channel);
     assert.deepEqual(sent, expected, `split at UTF-16 offset ${cut}`);
   }
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   for (let i = 0; i < text.length; i++) await events["message.appended"](delta(text[i]), channel);
   await events["message.completed"](complete(text), channel);
   assert.deepEqual(sent, expected);
@@ -62,7 +70,7 @@ test("all chunk boundaries preserve single newlines, CRLF, Unicode, and intact U
 test("waits for each send, preserves order, and refreshes typing while generating", async () => {
   const release = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
-  const { channel, sent, typingCount } = fixture(async () => { started.resolve(); await release.promise; });
+  const { events, channel, sent, typingCount } = fixture(async () => { started.resolve(); await release.promise; });
   await events["turn.started"](turn, channel);
   const sending = events["message.appended"](delta("one\n\ntwo\n\nthree"), channel);
   await started.promise;
@@ -76,7 +84,7 @@ test("waits for each send, preserves order, and refreshes typing while generatin
 });
 
 test("tool-step acknowledgments and multiple messages within one step remain distinct", async () => {
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   await events["message.appended"](delta("checking availability"), channel);
   await events["message.completed"](complete("checking availability", 0, "tool-calls"), channel);
   // Eve may continue emitting text after an inline tool without advancing the step.
@@ -90,10 +98,10 @@ test("tool-step acknowledgments and multiple messages within one step remain dis
 test("cancellation discards pending bubbles, blocks late events, and allows the next turn", async () => {
   const release = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
-  const { channel, sent } = fixture(async () => { started.resolve(); await release.promise; });
+  const { events, channel, sent } = fixture(async () => { started.resolve(); await release.promise; });
   const sending = events["message.appended"](delta("already sent\n\nqueued\n\nunfinished"), channel);
   await started.promise;
-  events["turn.cancelled"](turn, channel);
+  await events["turn.cancelled"](turn, channel);
   release.resolve();
   await sending;
   await events["message.completed"](complete("already sent\n\nqueued\n\nunfinished"), channel);
@@ -103,7 +111,7 @@ test("cancellation discards pending bubbles, blocks late events, and allows the 
   const next = { turnId: "turn_1", sequence: 1 };
   await events["turn.started"](next, channel);
   await events["message.appended"]({ ...delta("new plan"), ...next }, channel);
-  events["turn.cancelled"](turn, channel); // Late cancellation from the old turn.
+  await events["turn.cancelled"](turn, channel); // Late cancellation from the old turn.
   await events["message.completed"]({ ...complete("new plan"), ...next }, channel);
   assert.deepEqual(sent, ["already sent", "new plan"]);
 });
@@ -111,7 +119,7 @@ test("cancellation discards pending bubbles, blocks late events, and allows the 
 test("a replacement turn also stops an outstanding send loop", async () => {
   const release = Promise.withResolvers<void>();
   const started = Promise.withResolvers<void>();
-  const { channel, sent } = fixture(async () => { started.resolve(); await release.promise; });
+  const { events, channel, sent } = fixture(async () => { started.resolve(); await release.promise; });
   const sending = events["message.appended"](delta("one\n\ntwo\n\n"), channel);
   await started.promise;
   await events["turn.started"]({ turnId: "turn_1", sequence: 1 }, channel);
@@ -121,14 +129,14 @@ test("a replacement turn also stops an outstanding send loop", async () => {
 });
 
 test("failed sends stop later bubbles and are not retried by completion", async () => {
-  const { channel, sent } = fixture(async () => { throw new Error("provider timeout"); });
+  const { events, channel, sent } = fixture(async () => { throw new Error("provider timeout"); });
   await assert.rejects(events["message.appended"](delta("one\n\ntwo\n\n"), channel), /provider timeout/);
   await events["message.completed"](complete("one\n\ntwo\n\n"), channel);
   assert.deepEqual(sent, ["one"]);
 });
 
 test("model failure drops a draft and the failure cascade produces one notice", async () => {
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   await events["message.appended"](delta("a partial draft"), channel);
   const failure = { code: "MODEL_ERROR", message: "internal provider diagnostic" };
   await events["turn.failed"]({ ...turn, ...failure }, channel);
@@ -139,49 +147,133 @@ test("model failure drops a draft and the failure cascade produces one notice", 
 
 test("empty, withheld, and truncated completions never flush unfinished text", async () => {
   for (const done of [complete(null), complete("", 0, "length")]) {
-    const { channel, sent } = fixture();
+    const { events, channel, sent } = fixture();
     await events["message.appended"](delta("unfinished"), channel);
     await events["message.completed"](done, channel);
     assert.deepEqual(sent, []);
   }
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   await events["message.appended"](delta("\n\n \n\n"), channel);
   await events["message.completed"](complete("\n\n \n\n"), channel);
   assert.deepEqual(sent, []);
 });
 
 test("completion-only providers work without duplicate final delivery", async () => {
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   await events["message.completed"](complete("one\n\ntwo\nthree"), channel);
   await events["message.completed"](complete("one\n\ntwo\nthree"), channel);
   assert.deepEqual(sent, ["one", "two\nthree"]);
 });
 
+test("turn completion clears typing when the final bubble already streamed with a trailing delimiter", async () => {
+  for (const message of ["done\n\n", "done\r\n \r\n", "one\n\ndone\n\n"]) {
+    const { events, channel, sent, isTyping } = fixture();
+    await events["turn.started"](turn, channel);
+    await events["message.appended"](delta(message), channel);
+    assert.equal(isTyping(), true, "typing resumes after sending a bubble while generation continues");
+    await events["message.completed"](complete(message), channel);
+    await events["turn.completed"](turn, channel);
+    assert.equal(isTyping(), false, "the completed turn must not leave typing on");
+    assert.deepEqual(sent, message.startsWith("one") ? ["one", "done"] : ["done"]);
+  }
+});
+
+test("completion without a final send and cancellation still stop typing", async () => {
+  for (const done of [complete(null), complete(""), complete("unfinished", 0, "length")]) {
+    const { events, channel, sent, isTyping } = fixture();
+    await events["turn.started"](turn, channel);
+    await events["message.completed"](done, channel);
+    await events["turn.completed"](turn, channel);
+    assert.equal(isTyping(), false);
+    assert.deepEqual(sent, []);
+  }
+  const { events, channel, sent, isTyping } = fixture();
+  await events["turn.started"](turn, channel);
+  await events["message.appended"](delta("unfinished"), channel);
+  await events["turn.cancelled"](turn, channel);
+  await events["message.appended"](delta("late text\n\n"), channel);
+  assert.equal(isTyping(), false);
+  assert.deepEqual(sent, []);
+});
+
+test("stale terminal events never stop a newer turn's typing", async () => {
+  const { events, channel, sent, isTyping, typingStops } = fixture();
+  await events["turn.started"](turn, channel);
+  await events["turn.started"]({ turnId: "turn_1", sequence: 1 }, channel);
+  for (const stale of [turn, { turnId: "wrong-turn", sequence: 1 }]) {
+    await events["turn.completed"](stale, channel);
+    await events["turn.cancelled"](stale, channel);
+    await events["turn.failed"]({ ...stale, code: "MODEL_ERROR", message: "failed" }, channel);
+  }
+  assert.equal(isTyping(), true);
+  assert.equal(typingStops(), 0);
+  assert.deepEqual(sent, []);
+});
+
+test("failure cleanup runs even if sending the error notice fails", async () => {
+  const failure = { code: "MODEL_ERROR", message: "failed" };
+  for (const event of ["turn.failed", "session.failed"] as const) {
+    const { events, channel, sent, isTyping } = fixture(async () => { throw new Error("send failed"); });
+    await events["turn.started"](turn, channel);
+    await assert.rejects(events[event]({ ...turn, ...failure, sessionId: "test-session" }, channel), /send failed/);
+    assert.equal(isTyping(), false);
+    await events["session.failed"]({ ...failure, sessionId: "test-session" }, channel);
+    assert.equal(sent.length, 1, "failure cascades still send only one notice");
+  }
+});
+
+test("a delayed old failure does not run typing cleanup for a replacement turn", async () => {
+  const release = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const { events, channel, typingStops } = fixture(async () => { started.resolve(); await release.promise; });
+  await events["turn.started"](turn, channel);
+  const failing = events["turn.failed"]({ ...turn, code: "MODEL_ERROR", message: "failed" }, channel);
+  await started.promise;
+  await events["turn.started"]({ turnId: "turn_1", sequence: 1 }, channel);
+  release.resolve();
+  await failing;
+  assert.equal(typingStops(), 0);
+  assert.equal(channel.state.bubbleStream?.stopped, false);
+});
+
+test("typing cleanup errors do not fail a completed reply or expose provider details", async t => {
+  const warnings = t.mock.method(console, "warn", () => {});
+  const { events, channel, sent } = fixture(undefined, async () => { throw new Error("private provider details"); });
+  await events["turn.started"](turn, channel);
+  await events["message.appended"](delta("done\n\n"), channel);
+  await events["message.completed"](complete("done\n\n"), channel);
+  await events["turn.completed"](turn, channel);
+  assert.deepEqual(sent, ["done"]);
+  assert.equal(channel.state.bubbleStream?.stopped, true);
+  assert.deepEqual(warnings.mock.calls.map(call => call.arguments), [["[linq] typing cleanup failed"]]);
+});
+
 test("buffer state stays private to each session and survives serialization", async () => {
   const alice = fixture(), bob = fixture();
-  await events["message.appended"](delta("alice's "), alice.channel);
-  await events["message.appended"](delta("bob's message\n\n"), bob.channel);
+  await alice.events["message.appended"](delta("alice's "), alice.channel);
+  await bob.events["message.appended"](delta("bob's message\n\n"), bob.channel);
   alice.channel.state = JSON.parse(JSON.stringify(alice.channel.state));
-  await events["message.appended"](delta("message\n\n"), alice.channel);
-  await events["message.completed"](complete("alice's message\n\n"), alice.channel);
+  await alice.events["message.appended"](delta("message\n\n"), alice.channel);
+  await alice.events["message.completed"](complete("alice's message\n\n"), alice.channel);
   assert.deepEqual(alice.sent, ["alice's message"]);
   assert.deepEqual(bob.sent, ["bob's message"]);
 });
 
 test("optional typing support and absent threads do not break the stream", async () => {
-  const { channel, sent } = fixture();
+  const { events, channel, sent } = fixture();
   channel.thread!.startTyping = async () => { throw Object.assign(new Error("unsupported"), { code: "NOT_IMPLEMENTED" }); };
   await events["turn.started"](turn, channel);
   await events["message.appended"](delta("one\n\n"), channel);
   assert.deepEqual(sent, ["one"]);
   channel.thread = null;
   await events["message.completed"](complete("two", 1), channel);
+  await events["turn.completed"](turn, channel);
   assert.deepEqual(sent, ["one"]);
 });
 
 test("Eve's real emitter delivers bubbles before generation ends and separates private reasoning", async () => {
   const firstBubble = Promise.withResolvers<void>();
-  const { channel, sent } = fixture(async () => { firstBubble.resolve(); });
+  const { events, channel, sent } = fixture(async () => { firstBubble.resolve(); });
   async function* stream(): AsyncIterable<TextStreamPart<ToolSet>> {
     yield { type: "reasoning-delta", id: "r", text: "private scratch work" };
     yield { type: "text-delta", id: "m", text: "first bubble\n" };
