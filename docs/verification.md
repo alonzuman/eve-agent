@@ -2,6 +2,15 @@
 
 Verified against eve 0.52.2, AI SDK 7.0.93, Vercel CLI 59.11.7, and a real newly provisioned Vercel project.
 
+## Personality and streaming delivery update — local verification
+
+- Node.js 24.20.0: typecheck and all 43 automated tests pass, including identity, sender allowlist, Kernel browser isolation, screenshot attachments, and 14 delivery/instruction checks.
+- `npm run build` succeeds with the new composed instructions and Linq event handlers.
+- The pinned Eve stream emitter delivers the first test bubble while generation is held open; private reasoning is not delivered. No real Linq messages are sent by these tests.
+- The registered Linq handlers deliver streamed text before and after a screenshot attachment in the same conversation, with a successful receipt and no duplicate sends on replay.
+- `npm run eval:conversation -- --list` discovers all six synthetic conversation cases. Model-backed evals have not run: this checkout has no Gateway/OIDC or Blob credentials, and the current Vercel login cannot access the `undefined-software` team named in this repo.
+- This update has not been checked on a real phone. The live results below describe the earlier deployment, not the new streaming behavior. See [conversation verification](conversation.md#verification) for the remaining checks.
+
 ## Passed
 
 - TypeScript check and all 10 automated tests, including non-sensitive rejection diagnostics.

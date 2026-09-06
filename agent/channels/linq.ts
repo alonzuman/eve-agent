@@ -5,6 +5,7 @@ import sendBrowserScreenshot from "../tools/send_browser_screenshot.js";
 import { requireUserScope } from "../../src/identity/user-scope.js";
 import { deliverScreenshot, extractKernelScreenshot } from "../../src/browser/attachments.js";
 import { screenshotState } from "../../src/browser/screenshot-state.js";
+import { linqDeliveryEvents } from "../../src/messaging/linq-delivery.js";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -21,6 +22,7 @@ export default linqChannel({
   },
   turnPolicy: "steer",
   events: {
+    ...linqDeliveryEvents,
     async "action.result"({ result }, channel, ctx) {
       requireUserScope(ctx);
       const capture = extractKernelScreenshot(result);

@@ -25,6 +25,8 @@ You can also enter each variable interactively with `vercel env add NAME product
 
 The Linq channel uses eve's session continuation and interruption behavior. HTTP session APIs are service-only; they are not a public alternative login surface. The health endpoint is `/eve/v1/health`.
 
+Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
+
 ## Response allowlist
 
 Manage the allowlist in the project's [Vercel Flags dashboard](https://vercel.com/docs/flags/vercel-flags/dashboard). Create a **boolean** flag with key `linq-responses` and set its fallback outcome to `false`. Under **Targets**, assign the `true` option to each allowed **User ID**, using the sender's exact E.164 number, such as `+12025550101`. The application evaluates the flag with the verified sender as `user.id`.

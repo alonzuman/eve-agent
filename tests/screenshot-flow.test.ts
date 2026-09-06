@@ -32,7 +32,7 @@ function nextStep(previous: ContextContainer) {
 stampDefinitionKey(sendScreenshot, "test.send-browser-screenshot");
 registerDefinitionSource("test.send-browser-screenshot", { kind: "tool", name: "send_browser_screenshot" });
 
-test("Kernel capture -> durable state -> send tool -> actual Linq upload and attachment message -> receipt", async (t) => {
+test("streamed text and Kernel screenshot delivery coexist through the registered Linq handlers", async (t) => {
   const previousKey = process.env.LINQ_API_KEY;
   const previousSecret = process.env.LINQ_WEBHOOK_SECRET;
   process.env.LINQ_API_KEY = "test-api-key";
@@ -69,13 +69,28 @@ test("Kernel capture -> durable state -> send tool -> actual Linq upload and att
 
   const { adapter } = channel as unknown as { adapter: {
     createAdapterContext(input: unknown): object;
+    "message.appended"(data: unknown, context: unknown): Promise<void>;
+    "message.completed"(data: unknown, context: unknown): Promise<void>;
     "action.result"(data: unknown, context: unknown): Promise<void>;
   } };
+  const textMessages: string[] = [];
   const channelContext = {
     ...adapter.createAdapterContext!({ state: { thread: null } } as never),
-    thread: { id: "linq:chat-a:dm", isDM: true },
+    thread: {
+      id: "linq:chat-a:dm", isDM: true,
+      async post(text: string) { textMessages.push(text); },
+      async startTyping() {},
+    },
   };
   let context = freshContext("session-a");
+  const coordinates = { turnId: "turn-1", sequence: 1, stepIndex: 0 };
+  await contextStorage.run(context, () => adapter["message.appended"]({
+    ...coordinates, messageDelta: "checking the page\n\n",
+  }, channelContext));
+  assert.deepEqual(textMessages, ["checking the page"], "text must stream before screenshot work finishes");
+  await contextStorage.run(context, () => adapter["message.completed"]({
+    ...coordinates, message: "checking the page\n\n", finishReason: "tool-calls",
+  }, channelContext));
   await contextStorage.run(context, () => adapter["action.result"]!({ result: {
     kind: "tool-result", callId: "capture-1", toolName: "kernel__browser__computer_action",
     output: { content: [{ type: "image", mimeType: "image/png", data: png }] },
@@ -94,6 +109,13 @@ test("Kernel capture -> durable state -> send tool -> actual Linq upload and att
   await contextStorage.run(context, () => adapter["action.result"]!({ result: sendResult } as never, channelContext as never));
   assert.equal(uploads, 1);
   assert.equal(sends, 1, "replaying the send event must not post again after receipt persistence");
+  await contextStorage.run(context, () => adapter["message.appended"]({
+    ...coordinates, stepIndex: 1, messageDelta: "sent",
+  }, channelContext));
+  await contextStorage.run(context, () => adapter["message.completed"]({
+    ...coordinates, stepIndex: 1, message: "sent", finishReason: "stop",
+  }, channelContext));
+  assert.deepEqual(textMessages, ["checking the page", "sent"], "the attachment handler must preserve streamed text without duplicating it");
   await contextStorage.run(freshContext("session-b"), () => {
     assert.equal(screenshotState.get().screenshot, null, "another session must not see this screenshot");
     assert.throws(() => sendScreenshot.execute!({ action: "send" }, toolContext("send-b")), /No screenshot/);
