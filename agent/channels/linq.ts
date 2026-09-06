@@ -1,6 +1,5 @@
 import { linqChannel } from "eve/channels/linq";
-import { bindPrivateChat } from "../../src/identity/chat-owner.js";
-import { assessPrivateLinqIdentity } from "../../src/identity/linq-policy.js";
+import { admitLinqMessage } from "../../src/identity/linq-admission.js";
 import { toolResultFrom } from "eve/tools";
 import sendBrowserScreenshot from "../tools/send_browser_screenshot.js";
 import { requireUserScope } from "../../src/identity/user-scope.js";
@@ -41,17 +40,6 @@ export default linqChannel({
     },
   },
   async onMessage({ thread }, message) {
-    const assessment = assessPrivateLinqIdentity(message, thread.isDM, requiredEnv("LINQ_PHONE_NUMBER"));
-    if (!assessment.accepted) {
-      console.info("[linq] inbound rejected", { reason: assessment.reason });
-      return null;
-    }
-    const { identity } = assessment;
-    if (!await bindPrivateChat(identity.chatKey, identity.auth.principalId)) {
-      console.warn("[linq] inbound rejected", { reason: "conversation_owner_conflict" });
-      return null;
-    }
-    console.info("[linq] inbound accepted");
-    return { auth: identity.auth };
+    return admitLinqMessage(message, thread.isDM, requiredEnv("LINQ_PHONE_NUMBER"));
   },
 });
