@@ -1,9 +1,9 @@
-import { assessLinqResponseAccess, type EvaluateLinqResponseFlag } from "../flags/linq-responses.js";
+import { assessLinqResponseAccess } from "./linq-allowlist.js";
 import { bindPrivateChat } from "./chat-owner.js";
 import { assessPrivateLinqIdentity, type LinqMessage } from "./linq-policy.js";
 
 interface AdmissionDependencies {
-  readonly evaluateResponseFlag?: EvaluateLinqResponseFlag;
+  readonly allowedNumbers?: string;
   readonly bindChat?: typeof bindPrivateChat;
 }
 
@@ -12,7 +12,7 @@ export async function admitLinqMessage(
   message: LinqMessage,
   isDM: boolean,
   line: string,
-  { evaluateResponseFlag, bindChat = bindPrivateChat }: AdmissionDependencies = {},
+  { allowedNumbers, bindChat = bindPrivateChat }: AdmissionDependencies = {},
 ) {
   const assessment = assessPrivateLinqIdentity(message, isDM, line);
   if (!assessment.accepted) {
@@ -20,7 +20,7 @@ export async function admitLinqMessage(
     return null;
   }
   const { identity } = assessment;
-  const access = await assessLinqResponseAccess(identity.senderHandle, evaluateResponseFlag);
+  const access = assessLinqResponseAccess(identity.senderHandle, allowedNumbers);
   if (!access.accepted) {
     console.info("[linq] inbound rejected", { reason: access.reason });
     return null;
