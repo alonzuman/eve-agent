@@ -1,6 +1,6 @@
 # Eve personal assistant
 
-A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. Live send/receive is verified. The current scope is conversation, private file memory, shell/file tools, and isolated Chromium browsing. Link payments and the live flower purchase evaluation are deferred.
+A general-purpose eve agent on Vercel, connected to an existing Linq iMessage number. The current scope is conversation, private file memory, shell/file tools, Kernel browsing, and browser screenshot attachments. Link payments and the live flower purchase evaluation are deferred.
 
 ## Deployment
 
@@ -16,10 +16,10 @@ A general-purpose eve agent on Vercel, connected to an existing Linq iMessage nu
 First confirm that the existing number's webhook can be routed here. No existing Linq configuration has been changed.
 
 1. Enter `LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, and `LINQ_PHONE_NUMBER` in the project's [Vercel environment settings](https://vercel.com/undefined-software/eve-personal-agent/settings/environment-variables). The phone number must be its full E.164 form, such as `+14155550123`. Use encrypted/sensitive variables for secrets.
-2. Redeploy with `npm run deploy`.
+2. Create the `linq-responses` Vercel flag and configure its targets and `FLAGS` SDK key as described below. Redeploy with `npm run deploy`.
 3. Public webhook access is enabled: Vercel SSO was disabled with explicit user approval. Webhook signature verification and HTTP session authentication remain enforced.
 4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format.
-5. Text that number from a real phone. Only verified private inbound messages for the configured line are admitted. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
+5. Text that number from an allowlisted real phone. Only verified private inbound messages for the configured line from allowed sender numbers are admitted while responses are enabled. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
 
 You can also enter each variable interactively with `vercel env add NAME production`, keeping its value out of shell history. Pull development values with `vercel env pull .env.local --yes`. Do not commit environment files or paste credentials into conversation history.
 
@@ -27,11 +27,30 @@ The Linq channel uses eve's session continuation and interruption behavior. HTTP
 
 Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
 
+## Response allowlist
+
+Manage the allowlist in the project's [Vercel Flags dashboard](https://vercel.com/docs/flags/vercel-flags/dashboard). Create a **boolean** flag with key `linq-responses` and set its fallback outcome to `false`. Under **Targets**, assign the `true` option to each allowed **User ID**, using the sender's exact E.164 number, such as `+12025550101`. The application evaluates the flag with the verified sender as `user.id`.
+
+Vercel provisions a `FLAGS` SDK key for each environment when the first flag is created. Deploy once with that variable. Subsequent target changes apply to new incoming messages after propagation without redeploying. Pause the flag to stop admitting messages from everyone. Empty targets, missing configuration, invalid flag values, and config read failures also block responses. Only explicit `true` targets grant access; rules, rollouts, and a `true` fallback cannot expand the allowlist. Email handles, wildcards, and formatted local numbers are not allowed.
+
+Blocked messages receive an HTTP 200 acknowledgement and are ignored before owner storage, read receipts, or agent dispatch. Invalid signatures still receive 401. The policy is checked for every message, including existing conversations. A flag change does not cancel turns already admitted. See [setup and verification](docs/linq.md#response-flag-and-sender-allowlist).
+
 ## Browser
 
-A reusable Chromium image has already been provisioned and its `AGENT_BROWSER_SNAPSHOT_ID` configured in Vercel. To rebuild it, run `npm run browser:snapshot` after pulling local project credentials. It installs pinned Playwright/Chromium in an empty Vercel Sandbox, verifies the browser can load a page, and prints the new snapshot ID. Update the deployment environment and redeploy. The reusable image never contains a user's cookies.
+The official `@onkernel/eve-extension` is mounted at `agent/extensions/kernel/extension.ts`. Its hosted MCP connection supplies browser lifecycle, Playwright, computer controls and profiles. Eve's shell continues using Vercel Sandbox; the custom Chromium sandbox and image-building scripts have been removed.
 
-The browser tool supports navigation, page reading, clicking, filling, selecting, key presses, and screenshots. Each verified user gets a separate persistent browser sandbox. The browser and eve's shell run in different sandboxes; neither receives the application environment or Blob credentials. Production browser state is separated from development and preview state.
+Kernel uses the app-owned `KERNEL_API_KEY` supplied by its Vercel Marketplace resource. Users never authorize Kernel or see a Kernel sign-in link. The connection override selects a separate Kernel project for each verified Linq user and environment. Both MCP project selectors are supplied by the server and removed from model control. Project administration and credential-management tools are not exposed. Missing credentials or unavailable project isolation fail closed.
+
+Provision and connect the Developer resource from this project directory after the owner accepts Marketplace terms:
+
+```sh
+vercel integration add kernel --plan FREE --name eve-browser --no-claim
+vercel env pull .env.local --yes
+```
+
+The Developer plan has a $0 monthly base fee; browser usage is metered. Production, development, and preview branches use separate browser projects. The old Connect connector and `AGENT_BROWSER_SNAPSHOT_ID` are no longer used.
+
+To send a screenshot, the agent navigates a real Kernel browser, captures with `computer_action`, calls `send_browser_screenshot` with `action: "send"`, then checks `action: "status"`. The Linq channel retains the latest native PNG/JPEG capture in session state and uploads its bytes through Linq's attachment API. The destination comes from the originating private chat, never model input. Internal screenshots are not automatically sent. Sends use a stable per-session/per-capture idempotency key. A `sent` receipt means Linq accepted the message; arrival on the phone remains an end-to-end acceptance check.
 
 ## Development and checks
 
@@ -43,17 +62,16 @@ npm run check
 npm run build
 ```
 
-Run `node --env-file=.env.local --import tsx scripts/browser-smoke.ts` for the live two-user browser check. It creates temporary Vercel Sandboxes and deletes them after the check; Sandbox usage may incur charges.
-
-The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user.
+The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Screenshot sending requires a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. The tests cover screenshot validation, original-byte attachment payloads, send failures, idempotency keys, and existing identity/webhook checks.
 
 ## Acceptance after credentials are connected
 
 - Send and receive a real iMessage.
 - Ask the agent to remember a harmless unique fact, then verify it in a later conversation.
-- Use two sender accounts and confirm that memory, sessions, and browser cookies are separate.
+- Use two sender accounts and confirm memory/session isolation and separate Kernel projects.
 - Try a general task such as finding information on a website using the browser.
-- Verify a group message and an invalid webhook signature do not start a conversation.
+- Text “Send me a screenshot of the example.com home page” and verify an image attachment arrives in that same chat without a Kernel authorization prompt. Inspect Agent Runs for browser creation, navigation, screenshot capture, and the Linq message receipt. This live check must pass before declaring the screenshot flow verified.
+- Verify a non-allowlisted sender, a group message, and an invalid webhook signature do not start a conversation. Remove an allowed sender and confirm their next message is ignored; disable the response flag and confirm all new messages are ignored.
 
 eve's current Linq adapter deduplicates incoming webhook messages in process. Cross-instance retries can still cause duplicate conversational turns. There is no claim of exactly-once message processing, and payments must not be enabled until separate atomic purchase records and recovery rules are implemented.
 
