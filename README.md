@@ -25,6 +25,8 @@ You can also enter each variable interactively with `vercel env add NAME product
 
 The Linq channel uses eve's session continuation and interruption behavior. HTTP session APIs are service-only; they are not a public alternative login surface. The health endpoint is `/eve/v1/health`.
 
+Text `!reset` by itself to start fresh. Eve retires the sender's registered conversations and replies with a confirmation. Their next message starts a new conversation with empty memory and a fresh browser project; other users keep their state. This also works before the sender's first ordinary message. See [reset behavior and retention](docs/linq.md#start-fresh-with-reset).
+
 Eve's conversational voice is casual, curious, and concise, with tone and detail adapted to the user. On iMessage, blank lines send separate bubbles as generation progresses; single newlines stay within a bubble. See [conversation and streaming delivery](docs/conversation.md) for the instruction layout, interruption semantics, and verification commands.
 
 ## Response allowlist

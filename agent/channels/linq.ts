@@ -1,4 +1,4 @@
-import { linqChannel } from "eve/channels/linq";
+import { resettableLinqChannel } from "../../src/messaging/resettable-linq-channel.js";
 import { admitLinqMessage } from "../../src/identity/linq-admission.js";
 import { toolResultFrom } from "eve/tools";
 import sendBrowserScreenshot from "../tools/send_browser_screenshot.js";
@@ -13,7 +13,7 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-export default linqChannel({
+export default resettableLinqChannel({
   // Lazy resolvers let the deployment build before Linq credentials are connected.
   // Supplying signingSecret selects eve's built-in signed-webhook verification.
   credentials: {
