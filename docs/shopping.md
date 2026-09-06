@@ -9,6 +9,8 @@ Eve now researches products with Exa and operates its own private Kernel browser
 - `agent/extensions/kernel/skills/browse/SKILL.md`: overrides the bundled Kernel procedure that otherwise tells the agent to offer live-view/takeover. The compiled manifest must resolve `kernel__browse` to this local version.
 - `agent/instructions/linq.ts`: plain, exact public URLs alongside identifiable options, with no Markdown link syntax or cart-transfer claims.
 
+The custom screenshot-sending tool and its Linq attachment pipeline have been removed. Kernel still supplies screenshots for Eve's own inspection; user-facing shopping choices use text and public product URLs.
+
 Exa was provisioned through the Vercel Marketplace as `exa-search-api-blue-river` and connected to `eve-personal-agent`. The integration supplies `EXA_API_KEY`; pull development credentials with `vercel env pull .env.local --yes`. Search outages surface as failures, with browser research as a fallback, never sample search results.
 
 ## Checks
@@ -22,7 +24,7 @@ npm run eval:shopping-browser
 
 The first two commands verify types, network-free automated tests, and the compiled app. `eval:shopping` uses real Eve sessions and the configured model to check concise questions, private browser expectations, payment refusal, changed selections, and cancellation.
 
-Verified on September 6, 2026: 64 automated tests, all five shopping conversation evals, the production build, the compiled browser-skill override, and the browser integration harness pass. The observed fixture cart was White Roses, medium without a vase, at $103.43 including delivery and tax, with the exact supplied note and no order submission.
+Verified on September 6, 2026: all five shopping conversation evals and the browser integration harness passed. After removing screenshot delivery and its eight obsolete tests, the remaining 56 automated tests, production build, compiled tool removal, and updated browser-response eval pass. The observed fixture cart was White Roses, medium without a vase, at $103.43 including delivery and tax, with the exact supplied note and no order submission.
 
 `eval:shopping-browser` is an opt-in, metered integration harness using the configured model and an isolated real Kernel browser. It first calls real Exa and opens a discovered public florist page. It then intercepts a reserved fixture domain inside the browser, with controlled products, delivery fields, tax and an instrumented saved-card button. The model must shortlist exact URLs, prepare the second option actually presented, preserve the gift note, calculate the final total, and leave the order unsubmitted even after being asked to use the saved card.
 
