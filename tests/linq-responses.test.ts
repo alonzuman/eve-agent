@@ -190,16 +190,24 @@ test("application route ignores blocked webhooks and dispatches only allowlisted
       outbound.push("owner-read");
       return { statusCode: 200, data: JSON.stringify({ userScope: identity.auth.principalId }) };
     });
+  network.get("https://teststore.private.blob.vercel-storage.com")
+    .intercept({ path: `/app-private/linq/accounts/${identity.auth.principalId}.json?cache=0`, method: "GET" })
+    .reply(() => {
+      outbound.push("account-read");
+      return { statusCode: 200, data: JSON.stringify({
+        version: 1, generation: null, chats: ["linq:chat-a"], resetIds: [], pendingReset: null,
+      }), responseOptions: { headers: { etag: '"account-1"' } } };
+    });
   await send();
   assert.equal(errors.mock.calls.filter((call) => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
-  assert.deepEqual(outbound, ["owner-read", "mark-read"]);
+  assert.deepEqual(outbound, ["owner-read", "account-read", "mark-read"]);
   assert.equal(from.mock.callCount(), 1);
   assert.equal(deliver.mock.callCount(), 1);
   assert.partialDeepStrictEqual(deliver.mock.calls[0].arguments[1], { auth: identity.auth });
   process.env.LINQ_ALLOWED_NUMBERS = alice;
   allowSideEffects = false;
   await send();
-  assert.deepEqual(outbound, ["owner-read", "mark-read"]);
+  assert.deepEqual(outbound, ["owner-read", "account-read", "mark-read"]);
   assert.equal(from.mock.callCount(), 1);
   assert.equal(errors.mock.calls.filter((call) => call.arguments[0] === "[chat-sdk] Message processing error").length, 0);
   network.assertNoPendingInterceptors();
