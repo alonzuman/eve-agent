@@ -65,7 +65,7 @@ Kernel screenshots remain available for internal page inspection. The custom scr
 
 ## Shopping and search
 
-The app-owned Exa Search API resource is connected to the Vercel project. Pull its server-only `EXA_API_KEY` with `vercel env pull .env.local --yes`. The `search_web` tool requires the same verified private Linq identity as browsing. It returns bounded titles, public URLs and excerpts; live merchant prices, inventory and delivery still require browser verification.
+The app-owned Exa Search API resource is connected to the Vercel project. Pull its server-only `EXA_API_KEY` with `vercel env pull .env.local --yes`. The `search_web` tool accepts verified private Linq identities and eve's authenticated local development identity, as does browsing. It returns bounded titles, public URLs and excerpts; live merchant prices, inventory and delivery still require browser verification.
 
 Eve loads the shopping skill to gather missing constraints, present two or three specific products with clickable links, preserve the user's choice, and prepare non-payment checkout fields. It reports the final total when available and stops before placing an order or using any payment method. Browser sessions and carts belong to Eve's remote computer and are not accessible from the user's phone.
 
@@ -88,7 +88,17 @@ npm run build
 
 Use a development database in `.env.local`; the migration step needs a database URL. The Neon integration must expose credentials to Development for `vercel env pull` to include them. The real Postgres integration tests run when `TEST_DATABASE_URL` points at an isolated test database; see [database verification](docs/database.md#verification).
 
-The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Search and browser tools require a verified Linq identity; ordinary local TUI sessions cannot impersonate a phone user. Tests cover search, browser isolation, streaming delivery, message references, action receipts, send failures, idempotency keys, and identity/webhook checks.
+For a local development server with terminal logs and no terminal chat UI, run:
+
+```sh
+bun run dev --no-ui --host 127.0.0.1 --port 2000
+```
+
+Wait for the listening URL, then leave the process running while you edit; eve rebuilds on changes. In Eve Studio, open this project and use **Chat → Local**. Studio can also start the development server with its **Start** button. The local health endpoint is `http://127.0.0.1:2000/eve/v1/health`. Use `bunx eve traces` to inspect local traces, or `bun run dev` for eve's terminal chat UI.
+
+`bun start` serves the last production build; use `bun run build` first when testing that output. Satori stays external in `agent/agent.ts` so its HarfBuzz WASM file remains resolvable in both development and built servers.
+
+The built-in shell is explicitly configured to use Vercel Sandbox, including in local development. Local TUI and Studio sessions can search with Exa and browse in a separate local Kernel project. They can also render cards: `present_cards` returns `preview_ready` with an HTML gallery URL/path and PNG files under the system temporary directory's `eve-local-cards` folder. Open the gallery in your browser; local previews do not send iMessages. Files remain until removed or the system clears temporary storage. Production and preview deployments still require a verified private Linq identity for these tools; local sessions cannot use phone-user resources or authorize Linq delivery. Tests cover both identities, rendering, browser isolation, streaming delivery, message references, action receipts, send failures, idempotency keys, and webhook checks.
 
 ## Acceptance after credentials are connected
 

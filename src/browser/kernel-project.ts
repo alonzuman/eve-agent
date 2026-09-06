@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { requireUserScope, type UserScopedContext } from "../identity/user-scope.js";
+import { isLocalToolSession, requireToolScope, type UserScopedContext } from "../identity/user-scope.js";
 
 export function kernelApiKey(): string {
   const key = process.env.KERNEL_API_KEY?.trim();
@@ -8,10 +8,11 @@ export function kernelApiKey(): string {
 }
 
 export function kernelProjectName(ctx: UserScopedContext, env = process.env): string {
-  const user = requireUserScope(ctx);
-  const environment = env.VERCEL_ENV || "development";
+  const user = requireToolScope(ctx, env);
+  const local = isLocalToolSession(ctx, env);
+  const environment = local ? "local-development" : env.VERCEL_ENV || "development";
   const branch = environment === "production" ? "" : env.VERCEL_GIT_COMMIT_REF || "local";
-  const scope = [env.VERCEL_PROJECT_ID || "eve-personal-agent", environment, branch, user];
+  const scope = [env.VERCEL_PROJECT_ID || "eve-personal-agent", environment, branch, user, ...(local ? [process.cwd()] : [])];
   return `eve-${createHash("sha256").update(JSON.stringify(scope)).digest("hex")}`;
 }
 

@@ -1,20 +1,18 @@
 import { defineTool } from "eve/tools";
-import { z } from "zod";
-import { requireUserScope } from "../../src/identity/user-scope.js";
-import { cardSetId, cardsSchema } from "../../src/visual/cards.js";
+import { isLocalToolSession, requireToolScope } from "../../src/identity/user-scope.js";
+import { saveLocalCardPreview } from "../../src/visual/local-preview.js";
+import { cardSetId, cardsSchema, presentCardsInputSchema } from "../../src/visual/cards.js";
 import { visualCardsState } from "../../src/visual/card-state.js";
 import { CardTemplateError, renderCard } from "../../src/visual/render-card.js";
 
 export default defineTool({
   description: "Render and send 1–5 visual cards to the current private iMessage chat. Each card takes HTML with inline Satori flexbox CSS and a map of string props for {{PLACEHOLDERS}}. Compose layouts for researched options, summaries, plans, or other useful visuals. For comparisons use 3–5 numbered cards with real photos, exact prices and details; img src may be a prop containing an observed public HTTPS photo URL. action=present prepares and queues the batch; action=status must confirm a Linq messageId before claiming sent. action=retry reuses prepared cards after failure. status also returns lastSent for numbered follow-up references. No recipient is accepted.",
-  inputSchema: z.discriminatedUnion("action", [
-    cardsSchema.extend({ action: z.literal("present") }),
-    z.object({ action: z.literal("status") }),
-    z.object({ action: z.literal("retry") }),
-  ]),
+  inputSchema: presentCardsInputSchema,
   async execute(input, ctx) {
-    requireUserScope(ctx);
+    requireToolScope(ctx);
+    const local = isLocalToolSession(ctx);
     const { current, lastSent } = visualCardsState.get();
+    if (local && current?.localPreview && (input.action === "status" || input.action === "retry")) return current.localPreview;
     if (input.action === "status") return { ...(current?.receipt ?? { status: current ? "prepared" : "not_sent", setId: current?.id }), lastSent };
     if (input.action === "retry") {
       if (!current) throw new Error("No prepared cards to retry.");
@@ -22,7 +20,7 @@ export default defineTool({
     }
     const set = cardsSchema.parse(input);
     const id = cardSetId(set, ctx.callId);
-    if (current?.id === id) return current.receipt?.status === "sent" ? current.receipt : { status: "queued" as const, setId: id };
+    if (current?.id === id) return current.localPreview ?? (current.receipt?.status === "sent" ? current.receipt : { status: "queued" as const, setId: id });
     const images: string[] = [];
     let totalBytes = 0;
     const abortSignal = AbortSignal.any([ctx.abortSignal, AbortSignal.timeout(90_000)]);
@@ -39,7 +37,9 @@ export default defineTool({
       }
     }
     ctx.abortSignal.throwIfAborted();
-    visualCardsState.update(state => ({ ...state, current: { id, set, images, receipt: null } }));
+    const localPreview = local ? await saveLocalCardPreview(id, set, images) : undefined;
+    visualCardsState.update(state => ({ ...state, current: { id, set, images, receipt: null, ...(localPreview ? { localPreview } : {}) } }));
+    if (localPreview) return localPreview;
     return { status: "queued" as const, setId: id };
   },
 });
