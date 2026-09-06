@@ -5,7 +5,7 @@ A general-purpose eve agent on Vercel, ready to connect to an existing Linq iMes
 ## Deployment
 
 - Vercel project: [eve-personal-agent](https://vercel.com/undefined-software/eve-personal-agent)
-- Deployment: [eve-personal-agent-rouge.vercel.app](https://eve-personal-agent-rouge.vercel.app/eve/v1/health) (Vercel Deployment Protection currently enabled).
+- Deployment: [eve-personal-agent-rouge.vercel.app](https://eve-personal-agent-rouge.vercel.app/eve/v1/health).
 - Framework: eve `0.52.2`, pinned with its required AI SDK `7.0.93` peer dependency.
 - Model: `anthropic/claude-sonnet-5` through Vercel AI Gateway, using project OIDC.
 - Runtime: Node.js 24, eve's Vercel Workflow integration, and Vercel Sandbox.
@@ -17,8 +17,8 @@ First confirm that the existing number's webhook can be routed here. No existing
 
 1. Enter `LINQ_API_KEY`, `LINQ_WEBHOOK_SECRET`, and `LINQ_PHONE_NUMBER` in the project's [Vercel environment settings](https://vercel.com/undefined-software/eve-personal-agent/settings/environment-variables). The phone number must be its full E.164 form, such as `+14155550123`. Use encrypted/sensitive variables for secrets.
 2. Redeploy with `npm run deploy`.
-3. Resolve public webhook access: Vercel SSO currently protects this new project's domain. Automatic approval review rejected disabling it, so this has been left unchanged pending explicit approval. A direct Linq webhook must be able to reach its signed endpoint without an interactive Vercel login.
-4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above.
+3. Public webhook access is enabled: Vercel SSO was disabled with explicit user approval. Webhook signature verification and HTTP session authentication remain enforced.
+4. In Linq, register `https://eve-personal-agent-rouge.vercel.app/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added`, and `reaction.removed`, using the signing secret entered above. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format.
 5. Text that number from a real phone. Only verified private inbound messages for the configured line are admitted. Group messages, self messages, ambiguous senders, and attempts to change a conversation's owner are ignored. See [Linq details](docs/linq.md).
 
 You can also enter each variable interactively with `vercel env add NAME production`, keeping its value out of shell history. Pull development values with `vercel env pull .env.local --yes`. Do not commit environment files or paste credentials into conversation history.

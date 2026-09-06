@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { test } from "node:test";
 import { linqChannel } from "eve/channels/linq";
 import { bindPrivateChat, type ChatOwnerStore } from "../src/identity/chat-owner.js";
-import { canonicalHandle, privateLinqIdentity } from "../src/identity/linq-policy.js";
+import { assessPrivateLinqIdentity, canonicalHandle, privateLinqIdentity } from "../src/identity/linq-policy.js";
 import { requireUserScope } from "../src/identity/user-scope.js";
 
 const line = "+12025550100";
@@ -53,6 +53,30 @@ test("scope cannot come from anonymous, local-dev or service identities", () => 
   }
   assert.equal(canonicalHandle("12025550101"), null);
   assert.equal(canonicalHandle("Alice@EXAMPLE.COM"), "Alice@example.com");
+});
+
+test("rejection diagnostics identify missing flags and bad configuration without exposing identity", () => {
+  assert.deepEqual(assessPrivateLinqIdentity(message(), true, "12025550100"), {
+    accepted: false, reason: "configured_line_invalid",
+  });
+  assert.deepEqual(assessPrivateLinqIdentity(message(), true, "+12025550999"), {
+    accepted: false, reason: "owner_line_mismatch",
+  });
+  const missingOwner = message();
+  Reflect.deleteProperty(missingOwner.raw.chat, "owner_handle");
+  assert.deepEqual(assessPrivateLinqIdentity(missingOwner, true, line), {
+    accepted: false, reason: "owner_handle_missing",
+  });
+  const missingOwnerFlag = message();
+  Reflect.deleteProperty(missingOwnerFlag.raw.chat.owner_handle, "is_me");
+  assert.deepEqual(assessPrivateLinqIdentity(missingOwnerFlag, true, line), {
+    accepted: false, reason: "owner_self_flag_missing_or_false",
+  });
+  const missingSenderFlag = message();
+  Reflect.deleteProperty(missingSenderFlag.raw.sender_handle, "is_me");
+  assert.deepEqual(assessPrivateLinqIdentity(missingSenderFlag, true, line), {
+    accepted: false, reason: "sender_self_flag_missing_or_true",
+  });
 });
 
 test("racing first senders cannot claim one durable conversation twice", async () => {

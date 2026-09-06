@@ -1,6 +1,6 @@
 import { linqChannel } from "eve/channels/linq";
 import { bindPrivateChat } from "../../src/identity/chat-owner.js";
-import { privateLinqIdentity } from "../../src/identity/linq-policy.js";
+import { assessPrivateLinqIdentity } from "../../src/identity/linq-policy.js";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -17,9 +17,17 @@ export default linqChannel({
   },
   turnPolicy: "steer",
   async onMessage({ thread }, message) {
-    const identity = privateLinqIdentity(message, thread.isDM, requiredEnv("LINQ_PHONE_NUMBER"));
-    if (!identity) return null;
-    if (!await bindPrivateChat(identity.chatKey, identity.auth.principalId)) return null;
+    const assessment = assessPrivateLinqIdentity(message, thread.isDM, requiredEnv("LINQ_PHONE_NUMBER"));
+    if (!assessment.accepted) {
+      console.info("[linq] inbound rejected", { reason: assessment.reason });
+      return null;
+    }
+    const { identity } = assessment;
+    if (!await bindPrivateChat(identity.chatKey, identity.auth.principalId)) {
+      console.warn("[linq] inbound rejected", { reason: "conversation_owner_conflict" });
+      return null;
+    }
+    console.info("[linq] inbound accepted");
     return { auth: identity.auth };
   },
 });

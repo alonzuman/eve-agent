@@ -2,7 +2,7 @@
 
 The deployed channel is `/eve/v1/linq`. Builds and health checks work before Linq credentials exist; inbound Linq processing fails closed until configuration is complete.
 
-Vercel SSO Deployment Protection is currently enabled. Public direct Linq delivery needs a reachability change when connecting the number. Automatic approval review rejected disabling SSO without explicit user approval; no protection setting was changed. Operator checks can use `vercel curl`.
+Vercel SSO Deployment Protection was disabled with explicit user approval. The webhook is publicly reachable; unsigned requests and unauthenticated HTTP session requests still receive 401 responses.
 
 Configure these encrypted Vercel environment variables with `vercel env add NAME production` (and the corresponding environment when testing a preview):
 
@@ -11,9 +11,11 @@ Configure these encrypted Vercel environment variables with `vercel env add NAME
 - `LINQ_PHONE_NUMBER`: the one existing Linq line assigned to this application, in E.164 format, such as `+12025550100`.
 - `BLOB_READ_WRITE_TOKEN` or the provisioned `BLOB_STORE_ID` with Vercel OIDC access: the **private** store used by eve and the immutable chat-owner records.
 
-Redeploy after setting environment variables. After the line owner confirms which application should receive that number, create a subscription to `https://<production-domain>/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added` and `reaction.removed`. Preserve any existing application's webhook until its owner approves changing routing. Do not place tokens or webhook secrets in messages, instructions, or source files.
+Redeploy after setting environment variables. After the line owner confirms which application should receive that number, create a subscription to `https://<production-domain>/eve/v1/linq?version=2026-02-03` for `message.received`, `reaction.added` and `reaction.removed`. Select webhook payload version **2026-02-03** in Linq's subscription settings; the URL query parameter alone does not select the payload format. Preserve any existing application's webhook until its owner approves changing routing. Do not place tokens or webhook secrets in messages, instructions, or source files.
 
 The handler uses eve's Linq adapter and its built-in signature and timestamp checks. It accepts only explicit private inbound conversations whose signed `chat.owner_handle` matches the configured line. The signed sender identity must agree with the normalized message author. Groups, missing/ambiguous identities, messages from the agent itself, and other account lines are ignored.
+
+`LINQ_PHONE_NUMBER` is the receiving **agent line**, not the user's personal sender number. Include the leading `+` and country code, with no spaces or punctuation. An incorrectly formatted value caused the initial live messages to be ignored; admission logs now expose a fixed reason such as `configured_line_invalid` without logging message contents, numbers, or credentials.
 
 Every accepted sender gets a stable principal. eve owns durable sessions and default memory; application browser tools derive their scope from verified session auth, never a model-supplied user ID. A private, immutable Blob record pins each Linq conversation to its first sender and rejects later owner changes. The HTTP session API is restricted to internal project service/runtime access and local development because eve's generic route auth does not itself enforce session ownership.
 
