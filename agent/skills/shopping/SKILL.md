@@ -4,7 +4,7 @@ description: Help users choose gifts or products, compare shopping options, and 
 
 # Shopping through chat
 
-Carry the request through discovery, a useful choice, and cart preparation. Payments are unavailable: never submit an order (including pay-later or cash-on-delivery orders), enter payment details, use a saved payment method, or activate an express checkout. Do not create accounts or contact merchants without authorization.
+Carry the request through discovery, a useful choice, and cart preparation. Real merchant payments are unavailable: never submit an order (including pay-later or cash-on-delivery orders), enter payment details, use a saved payment method, or activate an express checkout. Do not create accounts or contact merchants without authorization.
 
 ## Establish the useful constraints
 
@@ -36,6 +36,6 @@ Gather the required recipient and delivery details and exact gift note. Preserve
 
 Inspect controls before clicking. Stop before any action that places an order, pays, or uses a saved wallet, even if the button says Continue or the user asks you to use a saved card. If payment, sign-in, a challenge, or a required detail prevents reaching the final total, report the actual stopping point and any unknown costs. Never describe an incomplete checkout as a fully prepared cart.
 
-When preparation succeeds, summarize the product/variant, quantity, merchant, delivery date or window, destination, gift note, and final total with shipping, tax, and fees. Clearly say no order has been placed and payment is not connected. End there without offering to pay later or walk the user through an unavailable payment flow. If any figure is an estimate, label it. Do not promise inventory reservation or a delivery slot merely because the item is in a cart.
+When preparation succeeds, summarize the product/variant, quantity, merchant, delivery date or window, destination, gift note, and final total with shipping, tax, and fees. Clearly say no order has been placed and real merchant payment execution is not enabled. End there without offering to pay later or walk the user through an unavailable payment flow. If any figure is an estimate, label it. Do not promise inventory reservation or a delivery slot merely because the item is in a cart.
 
 The cart exists in your private browser. Do not tell the user to finish it on their phone using a product link. Only describe a cart link as transferable when the merchant explicitly supports sharing it and you have verified that it restores the intended items in a separate unauthenticated session; never transmit credentials or session tokens. Keep an active shopping browser while continuing this task, reuse it where possible, and close it when the user cancels or is done. Browser/cart expiry may require rebuilding; never promise indefinite persistence.

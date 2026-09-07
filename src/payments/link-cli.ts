@@ -16,7 +16,7 @@ export type CliExecutor = (executable: string, args: readonly string[], options:
   ok: boolean; stdout: string;
 }>;
 
-const execute: CliExecutor = (executable, args, options) => new Promise(resolve => {
+export const executeLinkProcess: CliExecutor = (executable, args, options) => new Promise(resolve => {
   execFile(executable, args, options, (error, stdout) => {
     // Never propagate Error, stderr, command arguments, or stdout into Eve's traces.
     resolve({ ok: !error, stdout: String(stdout) });
@@ -37,7 +37,7 @@ function errorStatus(stdout: string): LinkFailure {
 }
 
 /** The model cannot select commands, credentials, paths, environment variables or endpoints. */
-export function createLinkCli(run: CliExecutor = execute): LinkCli {
+export function createLinkCli(run: CliExecutor = executeLinkProcess): LinkCli {
   return {
     async run(command, auth) {
       const dir = await mkdtemp(join(tmpdir(), "eve-link-")); // mode 0700

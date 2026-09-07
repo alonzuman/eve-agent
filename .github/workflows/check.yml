@@ -33,5 +33,7 @@ jobs:
       - run: npm run build
       - name: Check the bundled Link CLI
         run: node --import tsx scripts/check-link-bundle.ts
+      - name: Load the private checkout browser client
+        run: node --input-type=module -e "const {chromium} = await import('./.output/server/node_modules/playwright-core/index.mjs'); if (chromium.name() !== 'chromium') throw new Error('Missing checkout client')"
       - name: Initialize the bundled card font engine
         run: node --input-type=module -e "await (await import('./.output/server/node_modules/harfbuzzjs/index.js')).default"
