@@ -130,21 +130,22 @@ test("inline typography raises tiny text and resolves inherited and relative fon
   }
 });
 
-test("every rendered card has a protected, visible top-right x/y header, including a single card", async () => {
+test("every rendered card has a visible top-right x/y overlay, including a single card", async () => {
   const blank = { html: '<div style="width:100%;height:100%;background:#ff0000;position:absolute;top:-100px">Body</div>', props: {} };
   const tree = cardTree(blank);
   const header = JSON.stringify(frameCard(tree, 1000, 1250, { index: 2, total: 4 }));
   assert.match(header, /2\/4/);
-  assert.match(header, /"justifyContent":"flex-end"/);
+  assert.match(header, /"right":36/);
+  assert.ok(!header.includes("#f6f3ed"), "no white header surface");
   assert.match(header, /"overflow":"hidden"/);
   assert.throws(() => frameCard(tree, 1000, 1250, { index: 0, total: 4 }), /Invalid card position/);
   for (const count of [1, 2, 3, 4, 5]) {
     const image = await renderCard(blank, { position: { index: count, total: count } });
-    const raw = await sharp(image).extract({ left: 800, top: 24, width: 150, height: 84 }).removeAlpha().raw().toBuffer();
+    const raw = await sharp(image).extract({ left: 800, top: 40, width: 150, height: 80 }).removeAlpha().raw().toBuffer();
     let white = 0, dark = 0;
     for (let index = 0; index < raw.length; index += 3) {
       if (raw[index] > 245 && raw[index + 1] > 245 && raw[index + 2] > 245) white++;
-      if (raw[index] < 50 && raw[index + 1] < 50 && raw[index + 2] < 50) dark++;
+      if (raw[index] < 85 && raw[index + 1] < 85 && raw[index + 2] < 85) dark++;
     }
     assert.ok(white > 100 && dark > 1000, `visible high-contrast badge for ${count}/${count}`);
   }

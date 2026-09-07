@@ -37,20 +37,17 @@ export function readableCardTree(tree: Node, width: number): Node {
   return visit(tree, defaultSize) as Node;
 }
 
-/** The header is outside the clipped template so artwork cannot obscure its reference. */
+/** One full-bleed surface; paint the reference last so it stays above the artwork. */
 export function frameCard(tree: Node, width: number, height: number, position = { index: 1, total: 1 }): Node {
   if (!Number.isInteger(position.index) || !Number.isInteger(position.total) || position.index < 1 || position.index > position.total || position.total > 5) {
     throw new CardTemplateError("Invalid card position.");
   }
   const scale = Math.min(width / 1000, height / 500);
-  const header = 132 * scale;
   return { type: "div", props: {
-    style: { display: "flex", flexDirection: "column", width, height, backgroundColor: "#f6f3ed", fontFamily: "Outfit" },
+    style: { display: "flex", position: "relative", width, height, borderRadius: 36 * scale, overflow: "hidden", fontFamily: "Outfit" },
     children: [
-      { type: "div", props: { style: { display: "flex", justifyContent: "flex-end", alignItems: "center", height: header, flexShrink: 0, paddingRight: 36 * scale }, children: [
-        { type: "div", props: { style: { display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#16251e", color: "#ffffff", borderRadius: 24 * scale, fontSize: 64 * scale, fontWeight: 700, width: 180 * scale, height: 88 * scale }, children: `${position.index}/${position.total}` } },
-      ] } },
-      { type: "div", props: { style: { display: "flex", position: "relative", width, height: height - header, flexShrink: 0, overflow: "hidden" }, children: tree } },
+      { type: "div", props: { style: { display: "flex", position: "relative", width, height, flexShrink: 0, overflow: "hidden" }, children: tree } },
+      { type: "div", props: { style: { display: "flex", position: "absolute", top: 36 * scale, right: 36 * scale, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.72)", color: "#ffffff", borderRadius: 44 * scale, fontSize: 64 * scale, fontWeight: 700, width: 180 * scale, height: 88 * scale }, children: `${position.index}/${position.total}` } },
     ],
   } };
 }

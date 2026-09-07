@@ -7,19 +7,21 @@ Use present_cards when a visual makes the answer easier to understand. Send one 
 
 Each card has `html`, `props` (a record of string values), `label` (a brief text equivalent), and optionally `sourceUrl`. Placeholders such as `{{TITLE}}` work in text, inline CSS values, and image attributes. Reuse the same HTML with different props for consistent comparisons. The renderer adds a high-contrast top-right x/y badge automatically, even for a single card (1/1). Do not draw another number or supply a NUMBER prop.
 
-Use inline Satori flexbox CSS. Default size is 1000×1250. Design for an inline message about 280px wide: use 90–104px titles, 72px prices, and 56–64px details with strong contrast. The renderer enforces a 56px minimum and 64px default, scaled with canvas width. Shorten copy rather than relying on tiny text; use a short title, one price, and at most two brief detail lines. Keep critical caveats visible and move extra explanation into the caption. The renderer reserves a 132px header above your HTML, leaving a 1000×1118 content area at default dimensions; width/height 100% refer to that area. Scale your layout and font sizes proportionally for other widths. Use a root div with width/height 100%, explicit flex directions, and enough padding. Use normal or bold Outfit typography. Avoid overcrowding; keep names, prices, and critical caveats readable.
+Use inline Satori flexbox CSS. Default size is 1000×1250. Design for an inline message about 280px wide: use 90–104px titles, 72px prices, and 56–64px details with strong contrast. The renderer enforces a 56px minimum and 64px default, scaled with canvas width. Shorten copy rather than relying on tiny text; use a short title, one price, and at most two brief detail lines. Keep critical caveats visible and move extra explanation into the caption. The full 1000×1250 canvas is available to your HTML. The renderer supplies a single rounded outer edge and overlays a small translucent dark x/y badge in the top-right. Keep that corner free of important text; do not add a header strip, nested frames, or another badge. Scale your layout and font sizes proportionally for other widths. Use a root div with width/height 100%, explicit flex directions, and enough padding. Use normal or bold Outfit typography. Avoid overcrowding; keep names, prices, and critical caveats readable.
 
-Example HTML for a photo-backed option:
+For item recommendations, make the actual item photo the full-card background using an absolutely positioned img with object-fit:cover. Choose a crop that keeps the item visible. Overlay a smooth dark gradient that becomes strongest at the bottom, then anchor the text block bottom-left. Keep the upper half focused on the photo. Use one continuous rounded card, without separate white panels or bordered text boxes.
+
+Preferred HTML for a photo-backed option (default dimensions):
 
 ```html
 <div style="display:flex;position:relative;flex-direction:column;width:100%;height:100%;background:#111b19;color:white">
-  <img src="{{PHOTO}}" width="1000" height="660" style="position:absolute;top:0;left:0;object-fit:cover" />
-  <div style="display:flex;position:absolute;top:260px;left:0;width:100%;height:400px;background-image:linear-gradient(to bottom,rgba(17,27,25,0),#111b19)"></div>
-  <div style="display:flex;flex-direction:column;margin-top:auto;padding:48px">
-    <div style="font-size:56px;color:#cfdbd4">{{MERCHANT}}</div>
-    <div style="font-size:96px;font-weight:700;margin-top:18px">{{TITLE}}</div>
-    <div style="font-size:72px;color:#e7f0ca;margin-top:24px">{{PRICE}}</div>
-    <div style="font-size:56px;margin-top:28px">{{DETAIL}}</div>
+  <img src="{{PHOTO}}" width="1000" height="1250" style="position:absolute;top:0;left:0;object-fit:cover" />
+  <div style="display:flex;position:absolute;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(to bottom,rgba(0,0,0,0) 25%,rgba(0,0,0,0.12) 40%,rgba(0,0,0,0.72) 68%,rgba(0,0,0,0.94) 100%)"></div>
+  <div style="display:flex;position:absolute;bottom:0;left:0;width:100%;flex-direction:column;padding:56px">
+    <div style="font-size:56px;color:#e2e6e2">{{MERCHANT}}</div>
+    <div style="font-size:96px;font-weight:700;line-height:1.05;margin-top:16px">{{TITLE}}</div>
+    <div style="font-size:72px;font-weight:700;margin-top:20px">{{PRICE}}</div>
+    <div style="font-size:56px;line-height:1.2;margin-top:20px;color:#e2e6e2">{{DETAIL}}</div>
   </div>
 </div>
 ```
