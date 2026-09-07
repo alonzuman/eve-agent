@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import channel from "../agent/channels/linq.js";
+import reply from "../agent/tools/reply_to_message.js";
 import { messageStore } from "../src/messaging/message-store.js";
 import { ContextContainer, contextStorage } from "../node_modules/eve/dist/src/context/container.js";
 import { SessionKey } from "../node_modules/eve/dist/src/context/keys.js";
+import { buildCallbackContext } from "../node_modules/eve/dist/src/context/build-callback-context.js";
 import { callAdapterEventHandler } from "../node_modules/eve/dist/src/channel/adapter.js";
 import type { ChannelAdapter } from "../node_modules/eve/dist/src/channel/adapter.js";
 import type { UnstampedMessageStreamEvent } from "../node_modules/eve/dist/src/protocol/message.js";
@@ -102,5 +104,26 @@ test("registered Linq replies remain isolated across overlapping users and resto
     const failed = restore(b);
     await emit(failed, { type: "session.failed", data: { sessionId: "session-b", code: "FAILED", message: "failed" } });
     assert.deepEqual(sent.slice(before), [{ chat: "chat-b", text: "hit an error before i could finish. try that again?" }]);
+  });
+
+  await t.test("the registered tool and channel suppress an echoed threaded reply after restoration", async t => {
+    t.mock.method(messageStore, "resolve", async () => ({
+      ref: "m1", messageId: "parent", partIndex: 0, sender: "user", partType: "text", content: "question", replyTo: null,
+    }));
+    t.mock.method(messageStore, "claim", async () => ({ claimed: true }));
+    t.mock.method(messageStore, "accept", async () => ({ status: "accepted", target: "m1", ref: "m2" }));
+    const current = session("session-tool", alice, "chat-a");
+    await emit(current, { type: "turn.started", data: turn });
+    const before = sent.length;
+    await contextStorage.run(current.context, () => reply.execute!({ target: "m1", text: "first\n\nsecond" }, {
+      ...buildCallbackContext(), abortSignal: new AbortController().signal, callId: "reply-call", toolName: "reply_to_message",
+      async getToken(): Promise<never> { throw new Error("Unexpected token lookup"); },
+      requireAuth(): never { throw new Error("Unexpected authorization request"); },
+    }));
+    const resumed = restore(current);
+    await emit(resumed, { type: "message.appended", data: { ...coordinates, messageDelta: "first\n\nsecond" } });
+    await emit(resumed, completed("first\n\nsecond"));
+    await emit(resumed, { type: "turn.completed", data: turn });
+    assert.deepEqual(sent.slice(before), [{ chat: "chat-a", text: "first" }, { chat: "chat-a", text: "second" }]);
   });
 });

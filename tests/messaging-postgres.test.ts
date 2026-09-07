@@ -140,8 +140,11 @@ test("Postgres message storage, action delivery and recovery", { skip: !connecti
 
   await t.test("ambiguous sends stay unconfirmed across retries and session-state restoration", async () => {
     let calls = 0;
-    const request: typeof fetch = async () => { calls++; throw new Error("secret provider diagnostic"); };
-    const options = { store, request, apiKey: "test-key" };
+    const request: typeof fetch = async input => {
+      if (String(input).endsWith("/typing")) return new Response(null, { status: 204 });
+      calls++; throw new Error("secret provider diagnostic");
+    };
+    const options = { store, request, apiKey: "test-key", sleep: async () => {} };
     const action = { kind: "reply" as const, target, text: "ambiguous reply" };
     const result = await contextStorage.run(ctx, () => performMessageAction(action, toolContext(), options));
     assert.equal(result.status, "unconfirmed");
@@ -150,6 +153,32 @@ test("Postgres message storage, action delivery and recovery", { skip: !connecti
     for (const [key, value] of ctx.entries()) restored.set(key, JSON.parse(JSON.stringify(value)));
     assert.deepEqual(await contextStorage.run(restored, () => performMessageAction(action, toolContext(), options)), result);
     assert.equal(calls, 1);
+  });
+
+  await t.test("threaded batches persist every bubble and do not resume a partial failure", async () => {
+    for (const failAt of [undefined, 2]) {
+      const batchContext = runtime(`batch-${failAt ?? "success"}`);
+      const sent: string[] = [];
+      const request: typeof fetch = async (url, init) => {
+        if (String(url).endsWith("/typing")) return new Response(null, { status: 204 });
+        const body = JSON.parse(String(init?.body));
+        sent.push(body.message.parts[0].value);
+        if (sent.length === failAt) throw new Error("ambiguous send");
+        return Response.json({ chat_id: scope.chatId, message: { id: `batch-${failAt}-${sent.length}` } });
+      };
+      const options = { store, request, apiKey: "test-key", sleep: async () => {} };
+      const action = { kind: "reply" as const, target, text: "one\n\ntwo\n\nthree" };
+      const receipt = await contextStorage.run(batchContext, () => performMessageAction(action, toolContext(), options));
+      assert.equal(receipt.status, failAt ? "unconfirmed" : "accepted");
+      const rows = await db.select().from(schema.messages).where(inArray(schema.messages.messageId,
+        [1, 2, 3].map(index => `batch-${failAt}-${index}`)));
+      assert.equal(rows.length, failAt ? 1 : 3);
+      assert.ok(rows.every(row => row.replyToMessageId === "multipart" && row.replyToPartIndex === 1));
+      const restored = new ContextContainer();
+      for (const [key, value] of batchContext.entries()) restored.set(key, JSON.parse(JSON.stringify(value)));
+      assert.deepEqual(await contextStorage.run(restored, () => performMessageAction(action, toolContext(), options)), receipt);
+      assert.equal(sent.length, failAt ?? 3);
+    }
   });
 
   await t.test("receipt-write failure cannot trigger a second provider call", async () => {
