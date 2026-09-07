@@ -3,10 +3,10 @@ import { isLocalToolSession, requireToolScope } from "../../src/identity/user-sc
 import { saveLocalCardPreview } from "../../src/visual/local-preview.js";
 import { cardSetId, cardsSchema, presentCardsInputSchema } from "../../src/visual/cards.js";
 import { visualCardsState } from "../../src/visual/card-state.js";
-import { CardTemplateError, renderCard } from "../../src/visual/render-card.js";
+import { renderCardSet } from "../../src/visual/render-card-set.js";
 
 export default defineTool({
-  description: "Render and send 1–5 visual cards to the current private iMessage chat. Each card takes HTML with inline Satori flexbox CSS and a map of string props for {{PLACEHOLDERS}}. Compose layouts for researched options, summaries, plans, or other useful visuals. For comparisons use 3–5 numbered cards with real photos, exact prices and details; img src may be a prop containing an observed public HTTPS photo URL. action=present prepares and queues the batch; action=status must confirm a Linq messageId before claiming sent. action=retry reuses prepared cards after failure. status also returns lastSent for numbered follow-up references. No recipient is accepted.",
+  description: "Render and send 1–5 visual cards to the current private iMessage chat. Each card takes HTML with inline Satori flexbox CSS and a map of string props for {{PLACEHOLDERS}}. Compose layouts for researched options, summaries, plans, or other useful visuals. Choose 1–5 cards based on useful content and the requested count; fewer than four is fine. 4–5 images enable the native iMessage stack; 2–3 appear as a collage. Prioritize readable, well-spaced layouts at every count. Send all cards in one call. Use 90–104px titles, 72px prices, and at least 56px details at 1000px width; shorten copy to fit. The renderer adds a top-right x/y header automatically, leaving a 1000×1118 content area on the default canvas. Cards render concurrently. Use cards with real photos, exact prices and details; img src may be a prop containing an observed public HTTPS photo URL. action=present prepares and queues the batch; action=status must confirm a Linq messageId before claiming sent. action=retry reuses prepared cards after failure. status also returns lastSent for numbered follow-up references. No recipient is accepted.",
   inputSchema: presentCardsInputSchema,
   async execute(input, ctx) {
     requireToolScope(ctx);
@@ -21,21 +21,7 @@ export default defineTool({
     const set = cardsSchema.parse(input);
     const id = cardSetId(set, ctx.callId);
     if (current?.id === id) return current.localPreview ?? (current.receipt?.status === "sent" ? current.receipt : { status: "queued" as const, setId: id });
-    const images: string[] = [];
-    let totalBytes = 0;
-    const abortSignal = AbortSignal.any([ctx.abortSignal, AbortSignal.timeout(90_000)]);
-    for (const [index, card] of set.cards.entries()) {
-      ctx.abortSignal.throwIfAborted();
-      try {
-        const image = await renderCard({ ...card, width: set.width, height: set.height }, { abortSignal });
-        totalBytes += image.length;
-        if (totalBytes > 10 * 1024 * 1024) throw new CardTemplateError("Card batch exceeds 10 MB; reduce dimensions or photo count.");
-        images.push(image.toString("base64"));
-      } catch (error) {
-        const hint = error instanceof CardTemplateError ? error.message : "Check placeholders, simplify to inline flexbox CSS, and use public photo URLs.";
-        throw new Error(`Could not render card ${index + 1}. ${hint} No new card set was sent.`);
-      }
-    }
+    const images = await renderCardSet(set, { abortSignal: ctx.abortSignal });
     ctx.abortSignal.throwIfAborted();
     const localPreview = local ? await saveLocalCardPreview(id, set, images) : undefined;
     visualCardsState.update(state => ({ ...state, current: { id, set, images, receipt: null, ...(localPreview ? { localPreview } : {}) } }));
