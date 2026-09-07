@@ -33,6 +33,7 @@
   "dependencies": {
     "@onkernel/eve-extension": "0.1.4",
     "@resvg/resvg-js": "2.6.2",
+    "@stripe/link-cli": "0.17.1",
     "@vercel/blob": "2.8.0",
     "@vercel/functions": "3.9.5",
     "ai": "7.0.93",

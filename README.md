@@ -111,7 +111,7 @@ The built-in shell is explicitly configured to use Vercel Sandbox, including in 
 
 eve's current Linq adapter deduplicates incoming webhook messages in process. Cross-instance retries can still cause duplicate conversational turns. There is no claim of exactly-once message processing, and payments must not be enabled until separate atomic purchase records and recovery rules are implemented.
 
-No Link credentials, purchase tools, scheduled jobs, email monitoring, or password-vault integration are enabled. See [the payment handoff](src/payments/README.md) for the verified next-phase requirements. A real merchant confirmation remains necessary to pass the future flower-purchase evaluation.
+Per-user Link wallet connection is implemented through `connect_link_wallet`, `link_wallet_status`, and `disconnect_link_wallet`. Enable it by applying the database migration and setting `LINK_WALLET_ENCRYPTION_KEY` as described in [the wallet integration guide](src/payments/README.md). Wallet authorization is stored encrypted for the verified sender and never enters the model's memory or sandbox. Purchase approval, checkout execution, scheduled jobs, email monitoring, and password-vault integration remain unavailable. A real merchant confirmation remains necessary to pass the future flower-purchase evaluation.
 
 ## References
 
