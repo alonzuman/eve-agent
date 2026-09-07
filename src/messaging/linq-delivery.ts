@@ -1,12 +1,16 @@
-import { isNotImplemented } from "eve/channels/chat-sdk";
 import type { LinqChannelConfig } from "eve/channels/linq";
 import { stopLinqTyping } from "./linq-typing.js";
+import {
+  bubbleBoundary, deliveryTiming, isThreadedReplyEcho, sendLinqBubble, startBubbleTyping,
+  type BubbleDeliveryState, type DeliveryTiming,
+} from "./linq-bubbles.js";
 
 type Events = NonNullable<LinqChannelConfig["events"]>;
 type Event<K extends keyof Events> = Parameters<NonNullable<Events[K]>>[0];
 type Turn = { turnId: string; sequence: number };
 type StopTyping = (threadId: string) => Promise<void>;
 type RecordSentMessage = (threadId: string, text: string, receipt: unknown) => void | Promise<void>;
+type TurnDelivery = (turn: Turn) => BubbleDeliveryState;
 
 interface BubbleStream extends Turn {
   sentCount: number;
@@ -70,42 +74,20 @@ function forMessage(channel: DeliveryChannel, event: Turn & { stepIndex: number 
 }
 
 async function typing(channel: DeliveryChannel): Promise<void> {
-  try {
-    await channel.thread?.startTyping();
-  } catch (error) {
-    // Match Eve's optional typing support; real delivery errors still surface.
-    if (!isNotImplemented(error)) throw error;
-  }
+  await startBubbleTyping(async () => channel.thread?.startTyping());
 }
 
-interface DeliveryTiming {
-  random(): number;
-  sleep(ms: number): Promise<void>;
-}
-
-function typingDelayMs(text: string, random: number): number {
-  // Tune conversational pacing here: 250 ms to start, 25 ms per Unicode code
-  // point, and ±15% variation. Bound very short and very long messages.
-  const estimate = (250 + Array.from(text).length * 25) * (0.85 + random * 0.3);
-  return Math.round(Math.min(4_000, Math.max(400, estimate)));
-}
-
-async function send(channel: DeliveryChannel, stream: BubbleStream, text: string, timing: DeliveryTiming, recordSent?: RecordSentMessage): Promise<void> {
+async function send(channel: DeliveryChannel, stream: BubbleStream, text: string, timing: DeliveryTiming, recordSent?: RecordSentMessage, turnDelivery?: TurnDelivery): Promise<void> {
   if (!text || stream.stopped || !channel.thread) return;
-  // Eve's built-in conditional-delivery marker can arrive in deltas before its
-  // null completion. Never send it, including when followed by a blank line.
-  if (text.includes("<eve-empty-delivery/>") || text.includes("&lt;eve-empty-delivery/&gt;")) return;
+  const state = turnDelivery?.(stream) ?? stream;
+  if (isThreadedReplyEcho(state, text)) return;
   try {
-    if (stream.sentCount > 0) {
-      await typing(channel);
-      if (stream.stopped || !channel.thread) return;
-      await timing.sleep(typingDelayMs(text, timing.random()));
-      // Cancellation or a replacement turn can arrive while typing or waiting.
-      if (stream.stopped || !channel.thread) return;
-    }
-    const receipt = await channel.thread.post(text);
-    stream.sentCount = (stream.sentCount ?? 0) + 1;
-    await recordSent?.(channel.thread.id, text, receipt);
+    const thread = channel.thread;
+    const sent = await sendLinqBubble(text, {
+      state, timing, active: () => !stream.stopped && channel.thread === thread,
+      startTyping: () => thread.startTyping(), post: () => thread.post(text),
+    });
+    if (sent) await recordSent?.(thread.id, text, sent.receipt);
   } catch (error) {
     // Don't send later bubbles or automatically retry an ambiguous provider send.
     stop(channel, stream);
@@ -113,15 +95,15 @@ async function send(channel: DeliveryChannel, stream: BubbleStream, text: string
   }
 }
 
-async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: DeliveryTiming, recordSent?: RecordSentMessage): Promise<boolean> {
+async function drain(channel: DeliveryChannel, stream: BubbleStream, timing: DeliveryTiming, recordSent?: RecordSentMessage, turnDelivery?: TurnDelivery): Promise<boolean> {
   let sent = false;
   // Keep the unconsumed suffix, including a delimiter split across delta chunks.
   // A single LF/CRLF inside a bubble is preserved verbatim.
-  for (let boundary; !stream.stopped && (boundary = /\r?\n[\t ]*\r?\n/u.exec(stream.pending));) {
+  for (let boundary; !stream.stopped && (boundary = bubbleBoundary.exec(stream.pending));) {
     const text = stream.pending.slice(0, boundary.index).trim();
     stream.pending = stream.pending.slice(boundary.index + boundary[0].length);
     if (text) {
-      await send(channel, stream, text, timing, recordSent);
+      await send(channel, stream, text, timing, recordSent, turnDelivery);
       sent = true;
     }
   }
@@ -159,13 +141,11 @@ async function failure(channel: DeliveryChannel, stopTyping: StopTyping): Promis
 
 // Eve serializes stream event handling. Await each pause and post to retain order;
 // no detached queue or post-and-edit streaming.
-export function createLinqDeliveryEvents(stopTyping: StopTyping, options: Partial<DeliveryTiming> & { recordSent?: RecordSentMessage } = {}) {
-  const { recordSent, ...overrides } = options;
-  const timing: DeliveryTiming = {
-    random: () => Math.random(),
-    sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
-    ...overrides,
-  };
+export function createLinqDeliveryEvents(stopTyping: StopTyping, options: Partial<DeliveryTiming> & {
+  recordSent?: RecordSentMessage; turnDelivery?: TurnDelivery;
+} = {}) {
+  const { recordSent, turnDelivery, ...overrides } = options;
+  const timing = deliveryTiming(overrides);
   return {
     async "turn.started"(event: Event<"turn.started">, channel: DeliveryChannel) {
       const stream = forTurn(channel, event);
@@ -184,7 +164,7 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping, options: Partia
       }
       stream.receivedDeltas = true;
       stream.pending += event.messageDelta;
-      if (await drain(channel, stream, timing, recordSent) && !stream.stopped) await typing(channel);
+      if (await drain(channel, stream, timing, recordSent, turnDelivery) && !stream.stopped) await typing(channel);
     },
     async "message.completed"(event: Event<"message.completed">, channel: DeliveryChannel) {
       const stream = forMessage(channel, event);
@@ -200,10 +180,10 @@ export function createLinqDeliveryEvents(stopTyping: StopTyping, options: Partia
       // A completion repeats the full message; only flush the unsent suffix.
       // Also support a complete message from a provider that emitted no deltas.
       if (!stream.receivedDeltas) stream.pending = event.message;
-      await drain(channel, stream, timing, recordSent);
+      await drain(channel, stream, timing, recordSent, turnDelivery);
       const tail = stream.pending.trim();
       stream.pending = "";
-      await send(channel, stream, tail, timing, recordSent);
+      await send(channel, stream, tail, timing, recordSent, turnDelivery);
     },
     async "turn.cancelled"(event: Event<"turn.cancelled">, channel: DeliveryChannel) {
       const stream = forTurn(channel, event);

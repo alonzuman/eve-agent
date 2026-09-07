@@ -12,10 +12,11 @@ import {
   boundMessageConversation, inboundMessageParts, messageScope,
 } from "../../src/messaging/message-references.js";
 import { messageStore } from "../../src/messaging/message-store.js";
-import { beginMessageActions, stopMessageActions } from "../../src/messaging/linq-message-actions.js";
+import { beginMessageActions, messageTurnDelivery, stopMessageActions } from "../../src/messaging/linq-message-actions.js";
 import { bindLinqReplyRoute, requireLinqFailureRoute, requireLinqReplyRoute } from "../../src/messaging/linq-reply-routing.js";
 
 const deliveryEvents = createLinqDeliveryEvents(stopLinqTyping, {
+  turnDelivery: messageTurnDelivery,
   async recordSent(threadId, text, receipt) {
     if (!receipt || typeof receipt !== "object" || !("id" in receipt) || typeof receipt.id !== "string" || !receipt.id) {
       throw new Error("Missing Linq message receipt.");

@@ -50,7 +50,7 @@ The model receives the latest 40 message parts plus available direct reply paren
 
 - `accepted` means Linq accepted the request, not that the phone received it.
 - A pending claim survives process failure. A timeout, cancellation, rejected response, or receipt-write failure is treated as `unconfirmed`. Repeating that same action in the same turn does not call Linq again. A crash after claiming but before sending can therefore leave an action unsent. Recovery needs inspection or an explicit new user request; there is no automatic resend job.
-- Threaded replies also send the deterministic key to Linq as `idempotency_key`. Reactions use the database claim. These guards do not deduplicate separate turns generated from duplicate incoming webhooks.
+- Threaded replies also send deterministic keys to Linq as `idempotency_key`. A multi-bubble reply uses a distinct key for each position and one database claim for the whole batch. Each accepted bubble is recorded; the batch is accepted only after the final bubble and its receipt are saved. An interrupted or partially failed batch remains unconfirmed and is never automatically resumed. Reactions use the database claim. These guards do not deduplicate separate turns generated from duplicate incoming webhooks.
 - Ordinary streamed bubbles still use Eve's send behavior. If recording an accepted bubble fails, later bubbles stop, and the accepted bubble may lack a stored reference. Visual-card event replay can repair a missing message record from a saved receipt without resending the images.
 - Inbound reaction events remain ignored. Reply targets must be messages observed by this version, and the transport is limited to the authenticated private iMessage chat.
 
