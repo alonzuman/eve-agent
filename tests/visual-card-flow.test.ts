@@ -13,7 +13,7 @@ import { buildCallbackContext } from "../node_modules/eve/dist/src/context/build
 import { registerDefinitionSource, stampDefinitionKey } from "../node_modules/eve/dist/src/internal/authored-definition/source-identity.js";
 
 const identity = { authenticator: "linq-private", issuer: "linq:test", principalType: "user" as const, principalId: "a".repeat(64), attributes: {} };
-const set = cardsSchema.parse({ introduction: "Three ideas. Reply with a number.", cards: [1, 2, 3].map(number => ({
+const set = cardsSchema.parse({ introduction: "Four ideas. Reply with a number.", cards: [1, 2, 3, 4].map(number => ({
   html: '<div style="width:100%;height:100%;background:#eae4d3;display:flex;font-size:64px;padding:48px">{{TITLE}}</div>',
   props: { TITLE: `Idea ${number}` }, label: `Idea ${number}`, sourceUrl: `https://example.com/${number}`,
 })) });
@@ -89,7 +89,8 @@ test("real Linq adapter sends a rendered batch once, preserves references and re
     if (request.url.endsWith("/chats/chat-a/messages")) {
       sends++;
       const body = await request.json() as { message: { parts: { type: string; attachment_id?: string }[]; idempotency_key: string } };
-      assert.equal(body.message.parts.filter(part => part.type === "media").length, 3);
+      assert.equal(body.message.parts.filter(part => part.type === "media").length, 4);
+      assert.deepEqual(body.message.parts.filter(part => part.type === "media").map(part => part.attachment_id), attachments.slice(-4).map((_, index) => `attachment-${attachments.length - 3 + index}`));
       sendKeys.push(body.message.idempotency_key);
       if (rejectSend) return Response.json({ error: "test rejection" }, { status: 403 });
       return Response.json({ message: { id: `message-${sends}` }, chat_id: "chat-a" });
@@ -128,12 +129,12 @@ test("real Linq adapter sends a rendered batch once, preserves references and re
   assert.equal(receipt.lastSent?.set.cards[1].sourceUrl, "https://example.com/2");
   await contextStorage.run(context, () => assert.deepEqual(visualCardsState.get().current?.images, []));
   await dispatch(queued, "present-1");
-  assert.equal(sends, 1); assert.equal(uploads, 3);
+  assert.equal(sends, 1); assert.equal(uploads, 4);
   assert.deepEqual(recorded.mock.calls[0].arguments[1].map(part => [part.messageId, part.partIndex, part.partType]), [
-    ["message-1", 0, "text"], ["message-1", 1, "media"], ["message-1", 2, "media"], ["message-1", 3, "media"],
+    ["message-1", 0, "text"], ["message-1", 1, "media"], ["message-1", 2, "media"], ["message-1", 3, "media"], ["message-1", 4, "media"],
   ]);
   assert.equal(recorded.mock.calls[0].arguments[1][2].content, "[visual card attachment: Idea 2]");
-  assert.deepEqual(attachments, ["card-1.png", "card-2.png", "card-3.png"]);
+  assert.deepEqual(attachments, ["card-1.png", "card-2.png", "card-3.png", "card-4.png"]);
   const bad = { ...set, cards: [set.cards[0], { ...set.cards[1], html: "<div>{{MISSING}}</div>" }] };
   await assert.rejects(execute({ action: "present", ...bad }, "bad-layout"), /card 2/);
   assert.equal(sends, 1, "partial render cannot send");

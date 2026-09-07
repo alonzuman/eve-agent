@@ -8,7 +8,8 @@ import sharp from "sharp";
 import { asSchema } from "ai";
 import { fetchOptionImage, isPublicAddress } from "../src/visual/fetch-image.js";
 import { cardsSchema, cardSetId, cardSendKey, presentCardsInputSchema } from "../src/visual/cards.js";
-import { renderCard, cardTree } from "../src/visual/render-card.js";
+import { renderCard, cardTree, readableCardTree, frameCard, CardTemplateError } from "../src/visual/render-card.js";
+import { renderCardSet } from "../src/visual/render-card-set.js";
 import { deliverCards } from "../src/visual/deliver-cards.js";
 
 export const sampleSet = cardsSchema.parse({
@@ -108,6 +109,74 @@ test("generic HTML renderer produces a phone-size PNG without filesystem font de
   assert.ok(rendered.length < 1024 * 1024);
   await assert.rejects(renderCard({ html: '<img src="https://127.0.0.1/x" />', props: {} }), /not public/);
   await assert.rejects(renderCard(sampleSet.cards[0], { abortSignal: AbortSignal.abort() }));
+});
+
+test("inline typography raises tiny text and resolves inherited and relative font sizes at any canvas width", () => {
+  for (const width of [320, 1000, 1600]) {
+    const tree = readableCardTree(cardTree({ html: '<div><span style="font-size:12px">Tiny</span><div style="font-size:100px"><span style="font-size:50%">Relative</span><span>Inherited</span></div><span style="font-size:0.1rem">Small</span></div>', props: {} }), width);
+    const sizes: number[] = [];
+    function visit(value: unknown) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) { value.forEach(visit); return; }
+      const node = value as { props: { style: { fontSize: number }; children?: unknown } };
+      sizes.push(node.props.style.fontSize);
+      visit(node.props.children);
+    }
+    visit(tree);
+    assert.ok(sizes.every(size => size >= width * 0.056));
+    assert.ok(sizes.includes(width * 0.064), "omitted root font uses readable default");
+    assert.ok(sizes.includes(100), "larger authored font is retained");
+    assert.ok(sizes.includes(Math.max(50, width * 0.056)), "percentage resolves against parent");
+  }
+});
+
+test("every rendered card has a visible top-right x/y overlay, including a single card", async () => {
+  const blank = { html: '<div style="width:100%;height:100%;background:#ff0000;position:absolute;top:-100px">Body</div>', props: {} };
+  const tree = cardTree(blank);
+  const header = JSON.stringify(frameCard(tree, 1000, 1250, { index: 2, total: 4 }));
+  assert.match(header, /2\/4/);
+  assert.match(header, /"right":36/);
+  assert.ok(!header.includes("#f6f3ed"), "no white header surface");
+  assert.match(header, /"overflow":"hidden"/);
+  assert.throws(() => frameCard(tree, 1000, 1250, { index: 0, total: 4 }), /Invalid card position/);
+  for (const count of [1, 2, 3, 4, 5]) {
+    const image = await renderCard(blank, { position: { index: count, total: count } });
+    const raw = await sharp(image).extract({ left: 800, top: 40, width: 150, height: 80 }).removeAlpha().raw().toBuffer();
+    let white = 0, dark = 0;
+    for (let index = 0; index < raw.length; index += 3) {
+      if (raw[index] > 245 && raw[index + 1] > 245 && raw[index + 2] > 245) white++;
+      if (raw[index] < 85 && raw[index + 1] < 85 && raw[index + 2] < 85) dark++;
+    }
+    assert.ok(white > 100 && dark > 1000, `visible high-contrast badge for ${count}/${count}`);
+  }
+});
+
+test("card renders overlap and preserve numbering and input order despite reverse completion", async () => {
+  const releases: (() => void)[] = [];
+  const positions: unknown[] = [];
+  const pending = renderCardSet(sampleSet, { render: async (card, options) => {
+    positions.push(options?.position);
+    await new Promise<void>(resolve => { releases.push(resolve); });
+    return Buffer.from(card.props.TITLE);
+  } });
+  assert.equal(releases.length, 3, "all renders start before any finishes");
+  for (const release of releases.reverse()) release();
+  assert.deepEqual((await pending).map(image => Buffer.from(image, "base64").toString()), sampleSet.cards.map(card => card.props.TITLE));
+  assert.deepEqual(positions, [{ index: 1, total: 3 }, { index: 2, total: 3 }, { index: 3, total: 3 }]);
+});
+
+test("failed batches abort and drain sibling renders, and bound aggregate bytes", async () => {
+  let cancelled = 0;
+  await assert.rejects(renderCardSet(sampleSet, { render: async (_card, options) => {
+    if (options?.position?.index === 2) throw new CardTemplateError("Broken layout.");
+    await new Promise<void>(resolve => options!.abortSignal!.addEventListener("abort", () => { cancelled++; resolve(); }, { once: true }));
+    return Buffer.from("unused");
+  } }), /card 2.*Broken layout/);
+  assert.equal(cancelled, 2);
+  await assert.rejects(renderCardSet(sampleSet, { render: async () => Buffer.alloc(4 * 1024 * 1024) }), /batch exceeds 10 MB/);
+  let started = false;
+  await assert.rejects(renderCardSet(sampleSet, { abortSignal: AbortSignal.abort(), render: async () => { started = true; return Buffer.alloc(1); } }));
+  assert.equal(started, false);
 });
 
 test("one ordered multi-attachment send uses stable, session-isolated idempotency and sanitizes failures", async () => {

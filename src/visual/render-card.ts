@@ -17,6 +17,41 @@ type Node = { type: string; props: Record<string, unknown> };
 type Child = Node | string | number | null | Child[];
 export class CardTemplateError extends Error {}
 
+/** Resolve inherited/relative sizes before enforcing readability at inline message width. */
+export function readableCardTree(tree: Node, width: number): Node {
+  const minimum = width * 0.056;
+  const defaultSize = width * 0.064;
+  function visit(child: Child, inherited: number): Child {
+    if (Array.isArray(child)) return child.map(node => visit(node, inherited));
+    if (!child || typeof child !== "object") return child;
+    const style = { ...(child.props.style as Record<string, unknown>) };
+    const raw = style.fontSize;
+    const match = typeof raw === "string" ? raw.match(/^(\d+(?:\.\d+)?)(px|em|rem|%)?$/) : null;
+    let size = inherited;
+    if (typeof raw === "number") size = raw;
+    else if (match) size = Number(match[1]) * (match[2] === "em" ? inherited : match[2] === "rem" ? defaultSize : match[2] === "%" ? inherited / 100 : 1);
+    else if (raw !== undefined && raw !== "inherit") throw new CardTemplateError("Use numeric, px, em, rem, or % font sizes.");
+    style.fontSize = Math.max(minimum, size);
+    return { ...child, props: { ...child.props, style, children: visit(child.props.children as Child, style.fontSize as number) } };
+  }
+  return visit(tree, defaultSize) as Node;
+}
+
+/** One full-bleed surface; paint the reference last so it stays above the artwork. */
+export function frameCard(tree: Node, width: number, height: number, position = { index: 1, total: 1 }): Node {
+  if (!Number.isInteger(position.index) || !Number.isInteger(position.total) || position.index < 1 || position.index > position.total || position.total > 5) {
+    throw new CardTemplateError("Invalid card position.");
+  }
+  const scale = Math.min(width / 1000, height / 500);
+  return { type: "div", props: {
+    style: { display: "flex", position: "relative", width, height, borderRadius: 36 * scale, overflow: "hidden", fontFamily: "Outfit" },
+    children: [
+      { type: "div", props: { style: { display: "flex", position: "relative", width, height, flexShrink: 0, overflow: "hidden" }, children: tree } },
+      { type: "div", props: { style: { display: "flex", position: "absolute", top: 36 * scale, right: 36 * scale, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.72)", color: "#ffffff", borderRadius: 44 * scale, fontSize: 64 * scale, fontWeight: 700, width: 180 * scale, height: 88 * scale }, children: `${position.index}/${position.total}` } },
+    ],
+  } };
+}
+
 /** Parse first, substitute second: props remain data, even when they contain HTML. */
 export function cardTree(input: CardInput): Node {
   const { html, props } = cardSchema.parse(input);
@@ -76,10 +111,10 @@ export function cardTree(input: CardInput): Node {
 /** HTML + string props → self-contained PNG. No browser, JS execution, or public hosting. */
 export async function renderCard(
   input: CardInput & { width?: number; height?: number },
-  options: { abortSignal?: AbortSignal } = {},
+  options: { abortSignal?: AbortSignal; position?: { index: number; total: number } } = {},
 ): Promise<Buffer> {
   const canvas = canvasSchema.parse(input);
-  const tree = cardTree(input);
+  const tree = readableCardTree(cardTree(input), canvas.width);
   let imageCount = 0;
   async function embed(child: Child): Promise<void> {
     options.abortSignal?.throwIfAborted();
@@ -99,7 +134,7 @@ export async function renderCard(
   }
   await embed(tree);
   tree.props.style = { ...(tree.props.style as object), fontFamily: "Outfit" };
-  const svg = await satori(tree as Parameters<typeof satori>[0], { ...canvas, fonts });
+  const svg = await satori(frameCard(tree, canvas.width, canvas.height, options.position) as Parameters<typeof satori>[0], { ...canvas, fonts });
   options.abortSignal?.throwIfAborted();
   const png = new Resvg(svg, { font: { loadSystemFonts: false } }).render().asPng();
   if (png.length > 10 * 1024 * 1024) throw new CardTemplateError("Rendered card exceeds 10 MB.");
