@@ -2,6 +2,18 @@ import { sql } from "drizzle-orm";
 import { bigint, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique } from "drizzle-orm/pg-core";
 import type { AcceptedMessageAction } from "../messaging/message-references.js";
 
+// Credentials and pending OAuth device codes are encrypted together, outside Eve state.
+export const linkWallets = pgTable("link_wallets", {
+  namespace: text().notNull(),
+  principalId: text("principal_id").notNull(),
+  ciphertext: text().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  primaryKey({ columns: [table.namespace, table.principalId] }),
+  check("link_wallets_namespace", sql`${table.namespace} ~ '^[a-f0-9]{64}$'`),
+  check("link_wallets_principal", sql`${table.principalId} ~ '^[a-f0-9]{64}$'`),
+]);
+
 // A row is an addressable message part; multipart messages share messageId.
 export const messages = pgTable("linq_messages", {
   id: bigint({ mode: "bigint" }).primaryKey().generatedAlwaysAsIdentity(),

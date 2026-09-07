@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { migrateTestDatabase } from "./fixtures/migrate-postgres.js";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "../src/database/schema.js";
 import { createMessageStore, messageStore } from "../src/messaging/message-store.js";
@@ -27,8 +27,8 @@ test("Postgres message storage, action delivery and recovery", { skip: !connecti
     await db.delete(schema.messages).where(inArray(schema.messages.principalId, [principal, other, reset]));
     await pool.end();
   });
-  await migrate(db, { migrationsFolder: "drizzle" });
-  await migrate(db, { migrationsFolder: "drizzle" });
+  await migrateTestDatabase(pool);
+  await migrateTestDatabase(pool);
   const store = createMessageStore(() => db);
   const scope: MessageScope = { namespace: messageNamespace(), principalId: principal, chatId: "chat-a" };
   const input = (messageId: string, content = "hello"): MessageInput => ({

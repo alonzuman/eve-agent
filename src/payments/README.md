@@ -1,8 +1,93 @@
-# Link payment integration — deferred
+# Per-user Link wallet connections
 
-The current deliverable is an eve assistant reachable through the user's Linq
-number. Wallet connection, purchase tools and live spending are not enabled.
-No wallet credentials are required to deploy or use the messaging assistant.
+Eve can connect, check, and disconnect the current verified Linq user's Link
+wallet. Purchase approval and checkout execution are not enabled by this change.
+The messaging assistant still works without wallet configuration.
+
+## Enable in a deployment
+
+1. Run `npm run db:migrate` against the intended database. Migration `0001` adds
+   only the `link_wallets` table. Runtime uses the existing pooled Postgres connection.
+2. Generate a 32-byte cryptographically random key encoded as 64 hex characters;
+   store it as `LINK_WALLET_ENCRYPTION_KEY` using `vercel env add` for the intended
+   environment. Do not print or paste it into chat, source control, or build logs.
+3. Deploy the build. The pinned `@stripe/link-cli` 0.17.1 and its runtime assets are
+   included in the server bundle. No global CLI installation, merchant Stripe secret
+   key, or shared personal Link login is needed.
+4. From an allowed private Linq sender, ask Eve to connect Link. Open the returned
+   verification URL on your device, check the phrase, sign into Link and authorize
+   Eve. The background workflow checks completion and reports the actual result.
+
+Keep the encryption key stable and backed up with other application secrets.
+Changing it without re-encrypting existing records makes those records unreadable;
+the app fails closed instead of overwriting them. Namespace separation covers
+project, production/preview/development and preview branch, even on a shared DB.
+
+## Identity and lifecycle
+
+All tools have an empty, strict input schema. The trusted runtime's current and
+initiating Linq identities must match; anonymous, service and local-dev identities
+cannot use wallets. A user ID, account selector, auth path or token supplied in
+chat cannot select credentials. The store key is the deployment namespace plus
+`requireUserScope(ctx)`, which includes Eve's account-reset generation. Connections
+survive new conversations for the same account; after `!reset` the new account must
+connect again. The old generation's connection is inaccessible; disconnect before
+reset, or remove the old Eve connection in Link's connected-agent settings.
+
+The first connect creates a device authorization flow and saves its pending state
+under that owner. Repeated calls reuse the pending flow or valid connection. The
+user enters all payment information on Link. Authorization grants only
+`userinfo:read payment_methods.agentic`; it does not request financial transaction
+history or permission to approve purchases programmatically.
+
+`connect_link_wallet` sends its verification URL/phrase through a background task
+message and uses durable sleeps between bounded checks. The workflow's steps
+return only public status, connection ID, and the user-facing verification data.
+On successful device authorization, the backend checks user info with Link to
+validate the grant (and refresh expired tokens), then verifies the reported scopes.
+Status can be cached for 60 seconds after validation. Unknown scopes require a new
+authorization; no payment-method eligibility or spending limit is inferred.
+
+Denial and expiry stop automatic checking without restarting authorization.
+Disconnect deletes Eve's saved tokens and pending device code and rotates the
+connection ID so stale watchers cannot reconnect it. The CLI attempts remote
+revocation but suppresses revocation failures; Eve promises only local deletion.
+Users can revoke connected agents at https://app.link.com. Cancelling a background
+task stops checking; use disconnect to remove the connection itself.
+
+## Credential boundary and recovery
+
+- AES-256-GCM encrypts the complete record; authenticated associated data binds it
+  to the exact user and environment. Copying ciphertext into another user's row
+  cannot transfer wallet access.
+- A Postgres transaction/advisory lock serializes initial connection, polling,
+  refresh and disconnect across server instances. Competing operations report
+  busy rather than racing token writes. No database connection is held during
+  durable sleeps.
+- CLI commands use an absolute, pinned executable, argument arrays and a minimal
+  environment. They cannot inherit a global Link login, API/proxy override,
+  `NODE_OPTIONS` or app secrets. Auth uses a per-call 0700 temporary directory and
+  0600 file, deleted in `finally`; the directory is never in the Eve sandbox.
+- CLI output, user info, token previews, auth files and provider errors never
+  become tool results or logs. Only HTTPS `app.link.com` verification URLs are
+  returned. Updated auth files are encrypted even after a later provider error.
+- A crash or DB commit failure during OAuth token exchange/rotation can require
+  reauthorization: Link and Postgres do not share a transaction. The app reports
+  unavailable/needs-reconnection and never falls back to another wallet.
+
+## Validation
+
+`npm run check` covers credential filtering, expiry/denial, renewal, user/namespace
+isolation, stale-watcher fencing and encryption tamper detection. A local HTTP
+fixture exercises the actual pinned CLI's authorization, refresh, verification,
+denial and logout contracts with synthetic credentials. Set `TEST_DATABASE_URL` to
+a disposable Postgres DB to run the concurrent-wallet and message-store tests;
+CI provisions Postgres 17 and runs them. No test makes a live purchase or uses a
+personal Link account. After `npm run build`, run
+`node --import tsx scripts/check-link-bundle.ts` to verify the packaged CLI.
+
+A real phone/Link authorization check remains a deployment acceptance step and
+requires the user's Link approval. Model-backed evals are run only on request.
 
 ## Verified implementation inputs
 
@@ -48,14 +133,10 @@ Never supply `--approve` or delegated approval metadata for this pilot. The user
 must approve the actual request through Link. Use Link test mode against a
 controlled test checkout before enabling real purchases.
 
-## Required boundaries before enabling payments
+## Remaining boundaries before enabling purchases
 
-- Derive the wallet owner from verified session identity. Model tool inputs
-  must not accept an arbitrary user ID, auth path, executable or CLI arguments.
-- Keep per-user Link authentication encrypted in backend storage, outside
-  eve's file memory and sandbox. Invoke a pinned CLI with an argument array,
-  an allowlisted environment, bounded execution and private temporary files.
-  Do not log subprocess errors or return raw CLI JSON; both can contain secrets.
+- Reuse the verified wallet owner, encrypted store and serialized token handling
+  above. Add no model-visible credential retrieval or arbitrary CLI command tool.
 - Keep purchase records in an atomic store separate from conversational memory.
   Persist the user, immutable reviewed cart, Link request, approval status and
   merchant outcome. Use compare-and-set transitions and durable idempotency keys.
