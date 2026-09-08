@@ -15,6 +15,13 @@
       "when": 1788740054545,
       "tag": "0001_concerned_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788742759877,
+      "tag": "0002_neat_chronomancer",
+      "breakpoints": true
     }
   ]
 }

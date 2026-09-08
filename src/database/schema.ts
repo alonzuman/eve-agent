@@ -14,6 +14,17 @@ export const linkWallets = pgTable("link_wallets", {
   check("link_wallets_principal", sql`${table.principalId} ~ '^[a-f0-9]{64}$'`),
 ]);
 
+// Only encrypted checkout references live here; never card credentials or OAuth tokens.
+export const linkPurchases = pgTable("link_purchases", {
+  id: text().primaryKey(), namespace: text().notNull(), principalId: text("principal_id").notNull(),
+  callKey: text("call_key").notNull(), revision: integer().notNull().default(0),
+  ciphertext: text().notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [unique("link_purchase_call").on(table.namespace, table.principalId, table.callKey),
+  index("link_purchase_owner").on(table.namespace, table.principalId),
+  check("link_purchase_namespace", sql`${table.namespace} ~ '^[a-f0-9]{64}$'`),
+  check("link_purchase_principal", sql`${table.principalId} ~ '^[a-f0-9]{64}$'`),
+]);
+
 // A row is an addressable message part; multipart messages share messageId.
 export const messages = pgTable("linq_messages", {
   id: bigint({ mode: "bigint" }).primaryKey().generatedAlwaysAsIdentity(),

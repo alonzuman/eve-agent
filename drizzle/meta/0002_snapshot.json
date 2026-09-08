@@ -1,0 +1,473 @@
+{
+  "id": "9380fd42-7511-499e-909c-c94ffaa1e157",
+  "prevId": "43130fdb-f38c-43bc-9619-5628f5e96c3d",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.link_purchases": {
+      "name": "link_purchases",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal_id": {
+          "name": "principal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "call_key": {
+          "name": "call_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "ciphertext": {
+          "name": "ciphertext",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "link_purchase_owner": {
+          "name": "link_purchase_owner",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "principal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "link_purchase_call": {
+          "name": "link_purchase_call",
+          "nullsNotDistinct": false,
+          "columns": [
+            "namespace",
+            "principal_id",
+            "call_key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "link_purchase_namespace": {
+          "name": "link_purchase_namespace",
+          "value": "\"link_purchases\".\"namespace\" ~ '^[a-f0-9]{64}$'"
+        },
+        "link_purchase_principal": {
+          "name": "link_purchase_principal",
+          "value": "\"link_purchases\".\"principal_id\" ~ '^[a-f0-9]{64}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.link_wallets": {
+      "name": "link_wallets",
+      "schema": "",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal_id": {
+          "name": "principal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ciphertext": {
+          "name": "ciphertext",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "link_wallets_namespace_principal_id_pk": {
+          "name": "link_wallets_namespace_principal_id_pk",
+          "columns": [
+            "namespace",
+            "principal_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "link_wallets_namespace": {
+          "name": "link_wallets_namespace",
+          "value": "\"link_wallets\".\"namespace\" ~ '^[a-f0-9]{64}$'"
+        },
+        "link_wallets_principal": {
+          "name": "link_wallets_principal",
+          "value": "\"link_wallets\".\"principal_id\" ~ '^[a-f0-9]{64}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.linq_message_actions": {
+      "name": "linq_message_actions",
+      "schema": "",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action_key": {
+          "name": "action_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal_id": {
+          "name": "principal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request": {
+          "name": "request",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "receipt": {
+          "name": "receipt",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "linq_message_actions_target_id_linq_messages_id_fk": {
+          "name": "linq_message_actions_target_id_linq_messages_id_fk",
+          "tableFrom": "linq_message_actions",
+          "tableTo": "linq_messages",
+          "columnsFrom": [
+            "target_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "linq_message_actions_namespace_action_key_pk": {
+          "name": "linq_message_actions_namespace_action_key_pk",
+          "columns": [
+            "namespace",
+            "action_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "linq_actions_key": {
+          "name": "linq_actions_key",
+          "value": "\"linq_message_actions\".\"action_key\" ~ '^[a-f0-9]{64}$'"
+        },
+        "linq_actions_namespace": {
+          "name": "linq_actions_namespace",
+          "value": "\"linq_message_actions\".\"namespace\" ~ '^[a-f0-9]{64}$'"
+        },
+        "linq_actions_principal": {
+          "name": "linq_actions_principal",
+          "value": "\"linq_message_actions\".\"principal_id\" ~ '^[a-f0-9]{64}$'"
+        },
+        "linq_actions_kind": {
+          "name": "linq_actions_kind",
+          "value": "\"linq_message_actions\".\"kind\" in ('reaction', 'reply')"
+        },
+        "linq_actions_status": {
+          "name": "linq_actions_status",
+          "value": "\"linq_message_actions\".\"status\" in ('pending', 'accepted', 'unconfirmed')"
+        },
+        "linq_actions_receipt": {
+          "name": "linq_actions_receipt",
+          "value": "(\"linq_message_actions\".\"status\" = 'accepted') = (\"linq_message_actions\".\"receipt\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.linq_messages": {
+      "name": "linq_messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "linq_messages_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal_id": {
+          "name": "principal_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "part_index": {
+          "name": "part_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sender": {
+          "name": "sender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "part_type": {
+          "name": "part_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reply_to_message_id": {
+          "name": "reply_to_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_to_part_index": {
+          "name": "reply_to_part_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "linq_messages_recent": {
+          "name": "linq_messages_recent",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "principal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "linq_messages_provider_part": {
+          "name": "linq_messages_provider_part",
+          "nullsNotDistinct": false,
+          "columns": [
+            "namespace",
+            "principal_id",
+            "chat_id",
+            "message_id",
+            "part_index"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "linq_messages_namespace": {
+          "name": "linq_messages_namespace",
+          "value": "\"linq_messages\".\"namespace\" ~ '^[a-f0-9]{64}$'"
+        },
+        "linq_messages_principal": {
+          "name": "linq_messages_principal",
+          "value": "\"linq_messages\".\"principal_id\" ~ '^[a-f0-9]{64}$'"
+        },
+        "linq_messages_chat": {
+          "name": "linq_messages_chat",
+          "value": "length(\"linq_messages\".\"chat_id\") between 1 and 256"
+        },
+        "linq_messages_message": {
+          "name": "linq_messages_message",
+          "value": "length(\"linq_messages\".\"message_id\") between 1 and 256"
+        },
+        "linq_messages_part": {
+          "name": "linq_messages_part",
+          "value": "\"linq_messages\".\"part_index\" between 0 and 99"
+        },
+        "linq_messages_sender": {
+          "name": "linq_messages_sender",
+          "value": "\"linq_messages\".\"sender\" in ('user', 'agent')"
+        },
+        "linq_messages_reply": {
+          "name": "linq_messages_reply",
+          "value": "(\"linq_messages\".\"reply_to_message_id\" is null) = (\"linq_messages\".\"reply_to_part_index\" is null)\n    and (\"linq_messages\".\"reply_to_part_index\" is null or \"linq_messages\".\"reply_to_part_index\" between 0 and 99)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
